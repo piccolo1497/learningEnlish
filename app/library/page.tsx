@@ -24,7 +24,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  ChevronDown
+  ChevronDown,
+  CheckSquare,
+  Square,
+  Play,
+  X,
+  BrainCircuit,
+  Hash
 } from "lucide-react";
 
 // Styling Helpers
@@ -231,6 +237,28 @@ function LibraryPageContent() {
   // Filters state
   const [activeTab, setActiveTab] = useState<"all" | "word" | "phrase" | "idiom" | "native_daily_phrase">("all");
   const [starredOnly, setStarredOnly] = useState(false);
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showPracticeModal, setShowPracticeModal] = useState(false);
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  };
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -555,6 +583,49 @@ function LibraryPageContent() {
 
   const currentItems = pageData[currentPage] || [];
 
+  // Selection helpers (placed after currentItems and pageData are declared)
+  const toggleSelectAll = () => {
+    if (currentItems.every(item => selectedIds.has(item.id))) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        currentItems.forEach(item => next.delete(item.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        currentItems.forEach(item => next.add(item.id));
+        return next;
+      });
+    }
+  };
+
+  const getSelectedItems = useCallback((): VocabItem[] => {
+    const items: VocabItem[] = [];
+    const seenIds = new Set<string>();
+    Object.values(pageData).forEach(pageItems => {
+      pageItems.forEach(item => {
+        if (selectedIds.has(item.id) && !seenIds.has(item.id)) {
+          items.push(item);
+          seenIds.add(item.id);
+        }
+      });
+    });
+    return items;
+  }, [pageData, selectedIds]);
+
+  const handleStartPractice = (mode: "flashcard" | "fillblank") => {
+    const items = getSelectedItems();
+    if (items.length === 0) return;
+    sessionStorage.setItem("lexivault_custom_practice", JSON.stringify(items));
+    setShowPracticeModal(false);
+    if (mode === "flashcard") {
+      router.push("/practice?source=library");
+    } else {
+      router.push("/fillblank?source=library");
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -600,6 +671,25 @@ function LibraryPageContent() {
             <Star className={`w-3.5 h-3.5 ${starredOnly ? "fill-amber-450" : ""}`} />
             <span>Starred</span>
           </button>
+
+          {/* Selection Mode Toggle */}
+          <button
+            onClick={() => {
+              if (selectionMode) {
+                clearSelection();
+              } else {
+                setSelectionMode(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+              selectionMode
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>{selectionMode ? "Cancel" : "Select"}</span>
+          </button>
         </div>
       </div>
 
@@ -627,15 +717,63 @@ function LibraryPageContent() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Select All / Selection Status Bar */}
+          {selectionMode && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/15">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer transition-colors"
+                >
+                  {currentItems.length > 0 && currentItems.every(item => selectedIds.has(item.id))
+                    ? <CheckSquare className="w-4 h-4" />
+                    : <Square className="w-4 h-4" />
+                  }
+                  <span>Select All on Page</span>
+                </button>
+                <span className="text-[11px] text-slate-400 font-semibold">
+                  {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
+                </span>
+              </div>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-[11px] text-slate-500 hover:text-slate-300 font-bold cursor-pointer transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {currentItems.map((item) => (
+            {currentItems.map((item) => {
+              const isSelected = selectedIds.has(item.id);
+              return (
               <div
                 key={item.id}
-                className="glass-panel glass-panel-hover rounded-2xl p-6 border border-slate-900 flex flex-col justify-between min-h-[230px]"
+                className={`glass-panel glass-panel-hover rounded-2xl p-6 border flex flex-col justify-between min-h-[230px] transition-all ${
+                  isSelected
+                    ? "border-cyan-500/40 bg-cyan-500/5 ring-1 ring-cyan-500/20"
+                    : "border-slate-900"
+                }`}
+                onClick={selectionMode ? () => toggleSelection(item.id) : undefined}
+                style={selectionMode ? { cursor: "pointer" } : undefined}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      {selectionMode && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSelection(item.id); }}
+                          className="mr-1 text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                        >
+                          {isSelected
+                            ? <CheckSquare className="w-4.5 h-4.5" />
+                            : <Square className="w-4.5 h-4.5" />
+                          }
+                        </button>
+                      )}
                       <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md ${getTypeBadge(item.type)}`}>
                         {getTypeLabel(item.type)}
                       </span>
@@ -798,7 +936,8 @@ function LibraryPageContent() {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
 
           {/* Pagination Controls */}
@@ -847,6 +986,87 @@ function LibraryPageContent() {
             >
               <ChevronRight className="w-4.5 h-4.5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Selection Action Bar */}
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-cyan-500/25 shadow-2xl shadow-cyan-500/10">
+          <span className="text-sm font-bold text-slate-200">
+            {selectedIds.size} selected
+          </span>
+          <div className="w-px h-6 bg-slate-800" />
+          <button
+            onClick={() => setShowPracticeModal(true)}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 active:scale-95 transition-all cursor-pointer"
+          >
+            <Play className="w-4 h-4" />
+            Practice Selected
+          </button>
+          <button
+            onClick={clearSelection}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all cursor-pointer"
+            title="Clear selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Practice Mode Selection Modal */}
+      {showPracticeModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowPracticeModal(false)}>
+          <div
+            className="w-full max-w-md mx-4 p-6 rounded-2xl bg-[#0a0f1d] border border-slate-800 shadow-2xl space-y-5 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-100">Choose Practice Mode</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected for practice
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPracticeModal(false)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mode Options */}
+            <div className="grid grid-cols-1 gap-3">
+              {/* Flashcard Practice */}
+              <button
+                onClick={() => handleStartPractice("flashcard")}
+                className="group flex items-center gap-4 p-5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all cursor-pointer text-left"
+              >
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-colors">
+                  <BrainCircuit className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100 group-hover:text-emerald-300 transition-colors">Flashcard Recall</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Flip cards to test your memory with spaced repetition</p>
+                </div>
+              </button>
+
+              {/* Fill in the Blank */}
+              <button
+                onClick={() => handleStartPractice("fillblank")}
+                className="group flex items-center gap-4 p-5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all cursor-pointer text-left"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0 group-hover:bg-indigo-500/20 transition-colors">
+                  <Hash className="w-6 h-6 text-indigo-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100 group-hover:text-indigo-300 transition-colors">Fill in the Blank</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Type the correct word from its meaning and hints</p>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}

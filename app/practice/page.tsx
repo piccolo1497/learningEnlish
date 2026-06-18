@@ -143,6 +143,7 @@ function PracticePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const singleId = searchParams.get("id");
+  const librarySource = searchParams.get("source") === "library";
 
   const {
     words,
@@ -228,6 +229,31 @@ function PracticePageContent() {
       buildSingleQueue(singleId);
     }
   }, [singleId]);
+
+  // Load custom library selection on mount if source=library
+  useEffect(() => {
+    if (librarySource && !singleId) {
+      try {
+        const raw = sessionStorage.getItem("lexivault_custom_practice");
+        if (raw) {
+          const items: VocabItem[] = JSON.parse(raw);
+          if (items.length > 0) {
+            setIsConfigured(true);
+            setLoadingQueue(false);
+            setSessionFinished(false);
+            setPracticeIndex(0);
+            setShowMeaning(false);
+            setSessionStats({ correct: 0, total: 0 });
+            setPracticeQueue(shuffleArray(items));
+            sessionStorage.removeItem("lexivault_custom_practice");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load custom practice queue:", e);
+      }
+    }
+  }, [librarySource, singleId]);
 
   const buildSingleQueue = async (id: string) => {
     setLoadingQueue(true);

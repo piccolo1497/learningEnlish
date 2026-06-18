@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import {
@@ -124,7 +125,9 @@ const playPronunciation = (word: string, accent: "US" | "UK") => {
 
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function FillBlankPage() {
+function FillBlankContent() {
+  const searchParams = useSearchParams();
+  const librarySource = searchParams.get("source") === "library";
   const [allWords, setAllWords] = useState<VocabItem[]>([]);
   const [loading, setLoading]  = useState(true);
 
@@ -223,6 +226,26 @@ export default function FillBlankPage() {
     setScore({ correct: 0, wrong: 0 }); setStreak(0);
     setShowViHint(false); setShowLetterHint(false); setFinished(false);
   }, []);
+
+  // If navigated from library with custom selection, use those items
+  useEffect(() => {
+    if (librarySource) {
+      try {
+        const raw = sessionStorage.getItem("lexivault_custom_practice");
+        if (raw) {
+          const items: VocabItem[] = JSON.parse(raw);
+          if (items.length > 0) {
+            setAllWords(items);
+            setLoading(false);
+            sessionStorage.removeItem("lexivault_custom_practice");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load custom fillblank queue:", e);
+      }
+    }
+  }, [librarySource]);
 
   useEffect(() => { if (!loading && allWords.length) startGame(allWords); }, [loading, allWords, startGame]);
   useEffect(() => { if (result === null) inputRef.current?.focus(); }, [index, result]);
@@ -597,5 +620,17 @@ export default function FillBlankPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function FillBlankPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-cyan-500/25 border-t-cyan-500 rounded-full animate-spin" />
+      </div>
+    }>
+      <FillBlankContent />
+    </Suspense>
   );
 }
