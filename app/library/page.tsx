@@ -12,7 +12,8 @@ import {
   limit,
   getDocs,
   startAfter,
-  DocumentSnapshot
+  DocumentSnapshot,
+  getCountFromServer
 } from "firebase/firestore";
 import {
   Library,
@@ -22,7 +23,8 @@ import {
   Volume2,
   ChevronLeft,
   ChevronRight,
-  Plus
+  Plus,
+  ChevronDown
 } from "lucide-react";
 
 // Styling Helpers
@@ -233,6 +235,8 @@ function LibraryPageContent() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageData, setPageData] = useState<{ [page: number]: VocabItem[] }>({});
+  const [totalItemsCount, setTotalItemsCount] = useState<number | null>(null);
+  const [expandedPhrases, setExpandedPhrases] = useState<{ [id: string]: boolean }>({});
   
   // Performance optimized pagination controls (using refs to avoid hook dependency triggers)
   const cursorsRef = useRef<{ [page: number]: Cursors }>({
@@ -251,6 +255,8 @@ function LibraryPageContent() {
       0: { word: null, phrase: null, idiom: null, native_daily_phrase: null }
     };
     setHasMore(true);
+    setTotalItemsCount(null);
+    setExpandedPhrases({});
   }, [activeTab, starredOnly, searchQuery]);
 
   // Combined fetch function
@@ -285,6 +291,8 @@ function LibraryPageContent() {
                 w.example?.toLowerCase().includes(q)
               );
             }
+
+            setTotalItemsCount(all.length);
 
             // Sort by creation date desc
             all.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -342,6 +350,8 @@ function LibraryPageContent() {
           (w.example && w.example.toLowerCase().includes(q))
         );
 
+        setTotalItemsCount(filtered.length);
+
         const startIndex = (page - 1) * 10;
         const sliced = filtered.slice(startIndex, startIndex + 10);
 
@@ -351,6 +361,28 @@ function LibraryPageContent() {
       }
 
       // 2. Normal Mode: Server-side pagination
+      if (totalItemsCount === null) {
+        if (starredOnly) {
+          const types = activeTab === "all"
+            ? (["word", "phrase", "idiom", "native_daily_phrase"] as const)
+            : [activeTab] as const;
+          let totalStarred = 0;
+          await Promise.all(
+            types.map(async (t) => {
+              const q = query(
+                collection(db!, "vocabulary", t, "items"),
+                where("bookmarked", "==", true)
+              );
+              const snap = await getCountFromServer(q);
+              totalStarred += snap.data().count;
+            })
+          );
+          setTotalItemsCount(totalStarred);
+        } else {
+          setTotalItemsCount(counts[activeTab]);
+        }
+      }
+
       const typesToQuery = activeTab === "all"
         ? (["word", "phrase", "idiom", "native_daily_phrase"] as const)
         : [activeTab] as const;
@@ -439,7 +471,7 @@ function LibraryPageContent() {
       isLoadingRef.current = false;
       setLoadingItems(false);
     }
-  }, [activeTab, starredOnly, searchQuery]);
+  }, [activeTab, starredOnly, searchQuery, counts]);
 
   // Fetch page if not cached
   useEffect(() => {
@@ -447,6 +479,66 @@ function LibraryPageContent() {
       fetchPage(currentPage);
     }
   }, [currentPage, pageData, fetchPage]);
+
+  const computedTotalItems = useMemo(() => {
+    if (!db) {
+      return totalItemsCount;
+    }
+    if (searchQuery.trim()) {
+      return totalItemsCount;
+    }
+    if (starredOnly) {
+      return totalItemsCount;
+    }
+    return counts[activeTab];
+  }, [db, searchQuery, starredOnly, activeTab, counts, totalItemsCount]);
+
+  const totalPages = computedTotalItems !== null ? Math.max(1, Math.ceil(computedTotalItems / 10)) : 1;
+  const hasMoreComputed = computedTotalItems !== null ? currentPage < totalPages : hasMore;
+
+  const getPageNumbers = () => {
+    if (computedTotalItems === null) return [currentPage];
+    
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      if (currentPage > 3) {
+        pages.push("...");
+      }
+      
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      
+      let adjustedStart = start;
+      let adjustedEnd = end;
+      if (currentPage <= 3) {
+        adjustedEnd = 4;
+      }
+      if (currentPage >= totalPages - 2) {
+        adjustedStart = totalPages - 3;
+      }
+      
+      for (let i = adjustedStart; i <= adjustedEnd; i++) {
+        if (!pages.includes(i)) {
+          pages.push(i);
+        }
+      }
+      
+      if (currentPage < totalPages - 2) {
+        pages.push("...");
+      }
+      
+      if (!pages.includes(totalPages)) {
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
 
   // Navigations
   const handlePrevPage = () => {
@@ -456,7 +548,7 @@ function LibraryPageContent() {
   };
 
   const handleNextPage = () => {
-    if (hasMore) {
+    if (hasMoreComputed) {
       setCurrentPage(p => p + 1);
     }
   };
@@ -559,11 +651,19 @@ function LibraryPageContent() {
                     <button
                       onClick={async () => {
                         await toggleBookmark(item);
-                        // Refresh the current page's bookmark representation locally
-                        setPageData(prev => ({
-                          ...prev,
-                          [currentPage]: prev[currentPage].map(w => w.id === item.id ? { ...w, bookmarked: !w.bookmarked } : w)
-                        }));
+                        if (starredOnly) {
+                          setPageData(prev => ({
+                            ...prev,
+                            [currentPage]: prev[currentPage].filter(w => w.id !== item.id)
+                          }));
+                          setTotalItemsCount(prev => (prev !== null ? Math.max(0, prev - 1) : null));
+                        } else {
+                          // Refresh the current page's bookmark representation locally
+                          setPageData(prev => ({
+                            ...prev,
+                            [currentPage]: prev[currentPage].map(w => w.id === item.id ? { ...w, bookmarked: !w.bookmarked } : w)
+                          }));
+                        }
                       }}
                       className="text-slate-500 hover:text-amber-400 transition-colors p-0.5 rounded cursor-pointer"
                     >
@@ -631,6 +731,28 @@ function LibraryPageContent() {
                       &ldquo;{item.example}&rdquo;
                     </p>
                   )}
+
+                  {item.commonPhrases && (
+                    <div className="mt-3.5 border-t border-slate-900/60 pt-3">
+                      <button
+                        onClick={() => setExpandedPhrases(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                        className="flex items-center gap-1.5 text-[10px] font-black text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-wider cursor-pointer"
+                      >
+                        <span>Common Phrases ({item.commonPhrases.split("\n").filter(l => l.trim()).length})</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expandedPhrases[item.id] ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {expandedPhrases[item.id] && (
+                        <div className="flex flex-wrap gap-1.5 mt-2.5 animate-scale-up">
+                          {item.commonPhrases.split("\n").filter(line => line.trim()).map((phrase, idx) => (
+                            <span key={idx} className="px-2 py-0.5 rounded bg-cyan-500/5 text-cyan-400 border border-cyan-500/10 text-[11px] font-medium">
+                              {phrase}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between pt-2.5 border-t border-slate-900/60 mt-4">
@@ -657,6 +779,7 @@ function LibraryPageContent() {
                           ...prev,
                           [currentPage]: prev[currentPage].filter(w => w.id !== item.id)
                         }));
+                        setTotalItemsCount(prev => (prev !== null ? Math.max(0, prev - 1) : null));
                         refreshCounts();
                       }}
                       className="p-1.5 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-900 cursor-pointer"
@@ -679,25 +802,50 @@ function LibraryPageContent() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950/40 border border-slate-900">
+          <div className="flex items-center justify-center gap-2 mt-8">
             <button
               onClick={handlePrevPage}
               disabled={currentPage === 1 || loadingItems}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border bg-slate-900/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Prev</span>
+              <ChevronLeft className="w-4.5 h-4.5" />
             </button>
-            <span className="text-xs font-bold text-slate-400">
-              Page {currentPage} {loadingItems && <span className="text-cyan-500 animate-pulse ml-1">(loading...)</span>}
-            </span>
+            
+            <div className="flex items-center gap-2">
+              {getPageNumbers().map((p, idx) => {
+                if (p === "...") {
+                  return (
+                    <span key={`ell-${idx}`} className="w-10 h-10 flex items-center justify-center text-slate-500 text-sm font-semibold select-none">
+                      ...
+                    </span>
+                  );
+                }
+                const pageNum = p as number;
+                const isActive = pageNum === currentPage;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => {
+                      if (!loadingItems) setCurrentPage(pageNum);
+                    }}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl text-sm font-semibold border transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/20"
+                        : "bg-slate-900/60 text-slate-350 border-slate-800 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
             <button
               onClick={handleNextPage}
-              disabled={!hasMore || loadingItems}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              disabled={!hasMoreComputed || loadingItems}
+              className="w-10 h-10 flex items-center justify-center rounded-xl border bg-slate-900/60 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
-              <span>Next</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4.5 h-4.5" />
             </button>
           </div>
         </div>

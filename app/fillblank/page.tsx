@@ -318,7 +318,7 @@ export default function FillBlankPage() {
 
   // ── Game UI ───────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 w-full px-2">
       
       {/* Game Header: Progress & Scores */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-950/40 border border-slate-900">
@@ -352,7 +352,7 @@ export default function FillBlankPage() {
       </div>
 
       {/* Main Game Card */}
-      <div className="glass-panel rounded-3xl border border-slate-900 p-6 md:p-8 space-y-6 bg-gradient-to-b from-[#0a0f1d]/40 to-slate-950/20 backdrop-blur-md max-w-3xl mx-auto shadow-xl">
+      <div className="glass-panel rounded-3xl border border-slate-900 p-6 md:p-8 space-y-6 bg-gradient-to-b from-[#0a0f1d]/40 to-slate-950/20 backdrop-blur-md w-full shadow-xl">
         
         {/* Card Header: Meta + word type */}
         <div className="flex items-center justify-between border-b border-slate-900/60 pb-4">

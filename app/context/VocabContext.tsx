@@ -28,6 +28,7 @@ export interface VocabItem {
   meaning: string;      // English meaning
   vietnamese: string;   // Vietnamese meaning
   example: string;
+  commonPhrases?: string;
   difficulty: "easy" | "medium" | "hard";
   nextReview: string;
   bookmarked: boolean;
@@ -68,8 +69,8 @@ interface VocabContextType {
   setSelectedWord: (word: VocabItem | null) => void;
 
   // DB Actions
-  createWord: (formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string) => Promise<void>;
-  updateWord: (item: VocabItem, formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string) => Promise<void>;
+  createWord: (formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string, formCommonPhrases?: string) => Promise<void>;
+  updateWord: (item: VocabItem, formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string, formCommonPhrases?: string) => Promise<void>;
   deleteWord: (item: VocabItem) => Promise<void>;
   toggleBookmark: (item: VocabItem) => Promise<void>;
   updatePracticeProgress: (item: VocabItem, known: boolean) => Promise<void>;
@@ -269,7 +270,8 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
     formDifficulty: VocabItem["difficulty"],
     formWordTypes: string[],
     formPronunciationUS: string,
-    formPronunciationUK: string
+    formPronunciationUK: string,
+    formCommonPhrases?: string
   ) => {
     const newId = Math.random().toString(36).substring(2, 9);
     const newItem: VocabItem = {
@@ -285,6 +287,10 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       streak: 0,
       createdAt: new Date().toISOString()
     };
+
+    if (formCommonPhrases && formCommonPhrases.trim()) {
+      newItem.commonPhrases = formCommonPhrases.trim();
+    }
 
     if (formType !== "native_daily_phrase" && formWordTypes.length > 0) {
       newItem.wordTypes = formWordTypes;
@@ -328,7 +334,8 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
     formDifficulty: VocabItem["difficulty"],
     formWordTypes: string[],
     formPronunciationUS: string,
-    formPronunciationUK: string
+    formPronunciationUK: string,
+    formCommonPhrases?: string
   ) => {
     const updatedItem: VocabItem = {
       ...item,
@@ -339,6 +346,12 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       example: formExample.trim(),
       difficulty: formDifficulty,
     };
+
+    if (formCommonPhrases && formCommonPhrases.trim()) {
+      updatedItem.commonPhrases = formCommonPhrases.trim();
+    } else {
+      delete updatedItem.commonPhrases;
+    }
 
     if (formType !== "native_daily_phrase" && formWordTypes.length > 0) {
       updatedItem.wordTypes = formWordTypes;

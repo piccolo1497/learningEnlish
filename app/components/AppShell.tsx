@@ -167,6 +167,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [formMeaning, setFormMeaning] = useState("");
   const [formVietnamese, setFormVietnamese] = useState("");
   const [formExample, setFormExample] = useState("");
+  const [formCommonPhrases, setFormCommonPhrases] = useState("");
   const [formDifficulty, setFormDifficulty] = useState<"easy" | "medium" | "hard">("medium");
 
   // Pre-submit confirmation modal
@@ -254,14 +255,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setFormVietnamese(selectedWord.vietnamese);
       setFormExample(selectedWord.example);
       setFormDifficulty(selectedWord.difficulty);
+      setFormCommonPhrases(selectedWord.commonPhrases || "");
       setSpellingWarning(false);
     }
   }, [selectedWord]);
 
-  // Open add modal helper
-  const openAddModal = () => {
+  // Reset helper for adding cards
+  const resetAddForm = () => {
     setFormWord("");
-    setFormType("word");
     setFormWordTypes([]);
     setFormPronunciationUS("");
     setFormPronunciationUK("");
@@ -269,6 +270,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setFormMeaning("");
     setFormVietnamese("");
     setFormExample("");
+    setFormCommonPhrases("");
+  };
+
+  // Open add modal helper
+  const openAddModal = () => {
+    resetAddForm();
+    setFormType("word");
     setFormDifficulty("medium");
     setIsAddModalOpen(true);
   };
@@ -284,19 +292,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const summary = [
         { label: "Word / Phrase", value: formWord },
         { label: "Type", value: getTypeLabel(formType) },
-        { label: "Word Types", value: formType !== "native_daily_phrase" && formWordTypes.length > 0 ? formWordTypes.join(", ").toUpperCase() : "N/A" },
-        { label: "US Pronunciation", value: formType !== "native_daily_phrase" ? (formPronunciationUS || "None") : "N/A" },
-        { label: "UK Pronunciation", value: formType !== "native_daily_phrase" ? (formPronunciationUK || "None") : "N/A" },
+        { label: "Word Types", value: formType === "word" && formWordTypes.length > 0 ? formWordTypes.join(", ").toUpperCase() : "N/A" },
+        { label: "US Pronunciation", value: formType === "word" ? (formPronunciationUS || "None") : "N/A" },
+        { label: "UK Pronunciation", value: formType === "word" ? (formPronunciationUK || "None") : "N/A" },
         { label: "English Meaning", value: formMeaning },
         { label: "Vietnamese Translation", value: formVietnamese },
         { label: "Example Sentence", value: formExample || "None" },
+        { label: "Common Phrases", value: formCommonPhrases || "None" },
         { label: "Difficulty", value: formDifficulty.toUpperCase() }
       ];
       setConfirmData(summary);
       setIsConfirmModalOpen(true);
     } else {
-      await createWord(formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK);
-      setIsAddModalOpen(false);
+      await createWord(formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK, formCommonPhrases);
+      resetAddForm();
     }
   };
 
@@ -305,7 +314,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!selectedWord) return;
     if (!formWord.trim() || !formMeaning.trim() || !formVietnamese.trim()) return;
 
-    await updateWord(selectedWord, formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK);
+    await updateWord(selectedWord, formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK, formCommonPhrases);
     setIsEditModalOpen(false);
     setSelectedWord(null);
   };
@@ -554,7 +563,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ======================================================== */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto glass-panel rounded-2xl border border-slate-800 p-5 sm:p-8 space-y-6 shadow-2xl bg-[#0a0f1d] animate-scale-up scrollbar-thin">
+          <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto glass-panel rounded-2xl border border-slate-800 p-5 sm:p-8 space-y-6 shadow-2xl bg-[#0a0f1d] animate-scale-up scrollbar-thin">
             <div className="flex items-center justify-between border-b border-slate-900 pb-3">
               <h3 className="text-xl font-extrabold text-slate-100 flex items-center gap-2">
                 <Plus className="w-5 h-5 text-cyan-400 stroke-[2.5]" /> Add Vocabulary Card
@@ -607,7 +616,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
 
-                {formType !== "native_daily_phrase" ? (
+                {formType === "word" ? (
                   <>
                     <div className="space-y-1.5 md:col-span-1">
                       <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">US Pronunciation</label>
@@ -637,7 +646,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           type="text"
                           disabled
                           value={formPronunciationUK}
-                          className="flex-1 px-4 py-3 bg-slate-900/40 border border-slate-850/60 rounded-xl text-sm text-slate-350 cursor-not-allowed"
+                          className="flex-1 px-4 py-3 bg-slate-900/40 border border-slate-850/60 rounded-xl text-sm text-slate-355 cursor-not-allowed"
                         />
                         <button
                           type="button"
@@ -651,31 +660,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       </div>
                     </div>
                   </>
-                ) : (
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Test Pronunciation</label>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        disabled={!formWord.trim()}
-                        onClick={() => playPronunciation(formWord, "US")}
-                        className="flex-1 py-3 bg-slate-900/60 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer text-xs font-bold uppercase"
-                      >
-                        <Volume2 className="w-4 h-4" /> Listen (US Accent)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!formWord.trim()}
-                        onClick={() => playPronunciation(formWord, "UK")}
-                        className="flex-1 py-3 bg-slate-900/60 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer text-xs font-bold uppercase"
-                      >
-                        <Volume2 className="w-4 h-4" /> Listen (UK Accent)
-                      </button>
-                    </div>
-                  </div>
-                )}
+                ) : null}
 
-                {formType !== "native_daily_phrase" && (
+                {formType === "word" && (
                   <div className="space-y-1.5 md:col-span-2">
                     <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Word Type</label>
                     <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
@@ -699,7 +686,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             className={`py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                               (wt.value === "" && formWordTypes.length === 0) || isSelected
                                 ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
-                                : "bg-slate-900/60 border-slate-900/60 text-slate-450 hover:text-slate-200"
+                                : "bg-slate-900/60 border-slate-900/60 text-slate-455 hover:text-slate-200"
                             }`}
                           >
                             {wt.label}
@@ -710,36 +697,51 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
 
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">English Meaning</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={formMeaning}
-                    onChange={(e) => setFormMeaning(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all placeholder-slate-600 resize-none"
-                  />
+                {/* English & Vietnamese Meanings in same row */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">English Meaning</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={formMeaning}
+                      onChange={(e) => setFormMeaning(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all placeholder-slate-600 resize-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-emerald-400 block mb-1">Vietnamese Translation</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={formVietnamese}
+                      onChange={(e) => setFormVietnamese(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-emerald-950/30 focus:border-emerald-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all placeholder-slate-600 resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-emerald-400 block mb-1">Vietnamese Translation</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={formVietnamese}
-                    onChange={(e) => setFormVietnamese(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-emerald-950/30 focus:border-emerald-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all placeholder-slate-600 resize-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Example Sentence</label>
-                  <textarea
-                    rows={2}
-                    value={formExample}
-                    onChange={(e) => setFormExample(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all placeholder-slate-600"
-                  />
+                {/* Example Sentence & Common Phrases in same row */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Example Sentence</label>
+                    <textarea
+                      rows={3}
+                      value={formExample}
+                      onChange={(e) => setFormExample(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Common Phrases (Optional)</label>
+                    <textarea
+                      rows={3}
+                      value={formCommonPhrases}
+                      onChange={(e) => setFormCommonPhrases(e.target.value)}
+                      placeholder="Enter common phrases using this word, one per line..."
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all placeholder-slate-600"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
@@ -792,7 +794,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ======================================================== */}
       {isEditModalOpen && selectedWord && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto glass-panel rounded-2xl border border-slate-800 p-5 sm:p-8 space-y-6 shadow-2xl bg-[#0a0f1d] animate-scale-up scrollbar-thin">
+          <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto glass-panel rounded-2xl border border-slate-800 p-5 sm:p-8 space-y-6 shadow-2xl bg-[#0a0f1d] animate-scale-up scrollbar-thin">
             <div className="flex items-center justify-between border-b border-slate-900 pb-3">
               <h3 className="text-xl font-extrabold text-slate-100 flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-cyan-400 stroke-[2.5]" /> Edit Vocabulary Card
@@ -851,7 +853,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
 
-                {formType !== "native_daily_phrase" ? (
+                {formType === "word" ? (
                   <>
                     <div className="space-y-1.5 md:col-span-1">
                       <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">US Pronunciation</label>
@@ -895,31 +897,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       </div>
                     </div>
                   </>
-                ) : (
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Test Pronunciation</label>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        disabled={!formWord.trim()}
-                        onClick={() => playPronunciation(formWord, "US")}
-                        className="flex-1 py-3 bg-slate-900/60 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer text-xs font-bold uppercase"
-                      >
-                        <Volume2 className="w-4 h-4" /> Listen (US Accent)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!formWord.trim()}
-                        onClick={() => playPronunciation(formWord, "UK")}
-                        className="flex-1 py-3 bg-slate-900/60 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer text-xs font-bold uppercase"
-                      >
-                        <Volume2 className="w-4 h-4" /> Listen (UK Accent)
-                      </button>
-                    </div>
-                  </div>
-                )}
+                ) : null}
 
-                {formType !== "native_daily_phrase" && (
+                {formType === "word" && (
                   <div className="space-y-1.5 md:col-span-2">
                     <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Word Type</label>
                     <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
@@ -943,7 +923,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             className={`py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                               (wt.value === "" && formWordTypes.length === 0) || isSelected
                                 ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
-                                : "bg-slate-900/60 border-slate-900/60 text-slate-450 hover:text-slate-200"
+                                : "bg-slate-900/60 border-slate-900/60 text-slate-455 hover:text-slate-200"
                             }`}
                           >
                             {wt.label}
@@ -954,36 +934,51 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
 
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">English Meaning</label>
-                  <input
-                    type="text"
-                    required
-                    value={formMeaning}
-                    onChange={(e) => setFormMeaning(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all"
-                  />
+                {/* English & Vietnamese Meanings in same row */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">English Meaning</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={formMeaning}
+                      onChange={(e) => setFormMeaning(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all resize-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-emerald-400 block mb-1">Vietnamese Translation</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={formVietnamese}
+                      onChange={(e) => setFormVietnamese(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-emerald-950/30 focus:border-emerald-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-emerald-400 block mb-1">Vietnamese Translation</label>
-                  <input
-                    type="text"
-                    required
-                    value={formVietnamese}
-                    onChange={(e) => setFormVietnamese(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-emerald-950/30 focus:border-emerald-500/50 rounded-xl text-sm text-slate-200 focus:outline-none transition-all"
-                  />
-                </div>
-
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Example Sentence</label>
-                  <textarea
-                    rows={2}
-                    value={formExample}
-                    onChange={(e) => setFormExample(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all"
-                  />
+                {/* Example Sentence & Common Phrases in same row */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Example Sentence</label>
+                    <textarea
+                      rows={3}
+                      value={formExample}
+                      onChange={(e) => setFormExample(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[13px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Common Phrases (Optional)</label>
+                    <textarea
+                      rows={3}
+                      value={formCommonPhrases}
+                      onChange={(e) => setFormCommonPhrases(e.target.value)}
+                      placeholder="Enter common phrases using this word, one per line..."
+                      className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 focus:border-cyan-500/50 rounded-xl text-sm text-slate-200 focus:outline-none resize-none transition-all placeholder-slate-600"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
@@ -1098,9 +1093,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={async () => {
-                  await createWord(formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK);
+                  await createWord(formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK, formCommonPhrases);
                   setIsConfirmModalOpen(false);
-                  setIsAddModalOpen(false);
+                  resetAddForm();
                 }}
                 className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-slate-950 shadow hover:shadow-cyan/25 active:scale-95 transition-all cursor-pointer"
               >

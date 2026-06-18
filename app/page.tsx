@@ -348,61 +348,69 @@ export default function Home() {
             <BrainCircuit className="w-4.5 h-4.5 text-purple-400" /> Quick Recall
           </h3>
 
-          {reviewWords.length > 0 ? (
-            <div className="glass-panel rounded-2xl p-5 border border-slate-900 bg-[#0a101d]/60 flex flex-col justify-between min-h-[360px] relative">
-              <div className="flex-1 flex flex-col justify-center items-center text-center py-4">
-                <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded-md mb-3 ${getTypeBadge(reviewWords[quickIndex % reviewWords.length].type)}`}>
-                  {getTypeLabel(reviewWords[quickIndex % reviewWords.length].type)}
-                </span>
+          {reviewWords.length > 0 ? (() => {
+            const activeReviewItem = reviewWords[quickIndex % reviewWords.length];
+            return (
+              <div className="glass-panel rounded-2xl p-5 border border-slate-900 bg-[#0a101d]/60 flex flex-col justify-between min-h-[360px] relative">
+                <div className="flex-1 flex flex-col justify-center items-center text-center py-4">
+                  <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded-md mb-3 ${getTypeBadge(activeReviewItem.type)}`}>
+                    {getTypeLabel(activeReviewItem.type)}
+                  </span>
 
-                <h4 className="text-xl lg:text-2xl font-black text-slate-100 tracking-tight max-w-[220px] break-words">
-                  {reviewWords[quickIndex % reviewWords.length].word}
-                </h4>
+                  <h4 className="text-xl lg:text-2xl font-black text-slate-100 tracking-tight max-w-[220px] break-words">
+                    {activeReviewItem.word}
+                  </h4>
 
-                <div className="mt-3.5 w-full min-h-[90px] flex flex-col items-center justify-center">
-                  {showQuickMeaning ? (
-                    <div className="space-y-1.5 animate-scale-up">
-                      <p className="text-xs font-semibold text-slate-200 px-2 line-clamp-2">
-                        {reviewWords[quickIndex % reviewWords.length].meaning}
-                      </p>
-                      <p className="text-xs font-bold text-emerald-400 px-2 line-clamp-1">
-                        {reviewWords[quickIndex % reviewWords.length].vietnamese}
-                      </p>
-                      {reviewWords[quickIndex % reviewWords.length].example && (
-                        <p className="text-[11px] text-slate-450 italic px-3 line-clamp-1">
-                          &ldquo;{reviewWords[quickIndex % reviewWords.length].example}&rdquo;
+                  <div className="mt-3.5 w-full min-h-[90px] flex flex-col items-center justify-center">
+                    {showQuickMeaning ? (
+                      <div className="space-y-1.5 animate-scale-up">
+                        <p className="text-xs font-semibold text-slate-200 px-2 line-clamp-2">
+                          {activeReviewItem.meaning}
                         </p>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowQuickMeaning(true)}
-                      className="px-4 py-2 text-[12px] font-extrabold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl transition-all cursor-pointer"
-                    >
-                      Show Meaning
-                    </button>
-                  )}
+                        <p className="text-xs font-bold text-emerald-400 px-2 line-clamp-1">
+                          {activeReviewItem.vietnamese}
+                        </p>
+                        {activeReviewItem.example && (
+                          <p className="text-[11px] text-slate-450 italic px-3 line-clamp-1">
+                            &ldquo;{activeReviewItem.example}&rdquo;
+                          </p>
+                        )}
+                        {activeReviewItem.commonPhrases && (
+                          <p className="text-[11px] text-cyan-400 font-bold px-3 line-clamp-1">
+                            Phrases: {activeReviewItem.commonPhrases.replace(/\n/g, ", ")}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowQuickMeaning(true)}
+                        className="px-4 py-2 text-[12px] font-extrabold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl transition-all cursor-pointer"
+                      >
+                        Show Meaning
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-900">
+                  <button
+                    onClick={() => handleQuickPracticeAction(false)}
+                    className="flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold text-rose-455 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 transition-all cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                    Forgot
+                  </button>
+                  <button
+                    onClick={() => handleQuickPracticeAction(true)}
+                    className="flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold text-emerald-455 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 transition-all cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                    Knew It
+                  </button>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-900">
-                <button
-                  onClick={() => handleQuickPracticeAction(false)}
-                  className="flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold text-rose-455 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 transition-all cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                  Forgot
-                </button>
-                <button
-                  onClick={() => handleQuickPracticeAction(true)}
-                  className="flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold text-emerald-455 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 transition-all cursor-pointer"
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                  Knew It
-                </button>
-              </div>
-            </div>
-          ) : (
+            );
+          })() : (
             <div className="glass-panel rounded-2xl p-6 border border-slate-900 text-center flex flex-col items-center justify-center bg-[#0a0f1d]/30 min-h-[360px] space-y-4">
               <div className="w-11 h-11 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-450 border border-emerald-500/25">
                 <Check className="w-5 h-5 stroke-[3]" />
