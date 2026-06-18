@@ -631,11 +631,32 @@ function LibraryPageContent() {
       
       {/* Library Header Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-slate-950/40 border border-slate-900">
-        <div className="space-y-0.5">
-          <h2 className="text-xl font-bold text-slate-100">Library Words</h2>
-          <p className="text-[13px] text-slate-400">
-            Explore and query words, phrases, and idioms. Use filters to adjust catalog.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="space-y-0.5">
+            <h2 className="text-xl font-bold text-slate-100">Library Words</h2>
+            <p className="text-[13px] text-slate-400">
+              Explore and query words, phrases, and idioms. Use filters to adjust catalog.
+            </p>
+          </div>
+
+          {/* Selection Mode Toggle — next to heading */}
+          <button
+            onClick={() => {
+              if (selectionMode) {
+                clearSelection();
+              } else {
+                setSelectionMode(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer shrink-0 ${
+              selectionMode
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>{selectionMode ? "Cancel" : "Select"}</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -670,25 +691,6 @@ function LibraryPageContent() {
           >
             <Star className={`w-3.5 h-3.5 ${starredOnly ? "fill-amber-450" : ""}`} />
             <span>Starred</span>
-          </button>
-
-          {/* Selection Mode Toggle */}
-          <button
-            onClick={() => {
-              if (selectionMode) {
-                clearSelection();
-              } else {
-                setSelectionMode(true);
-              }
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-              selectionMode
-                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span>{selectionMode ? "Cancel" : "Select"}</span>
           </button>
         </div>
       </div>
@@ -752,9 +754,9 @@ function LibraryPageContent() {
               return (
               <div
                 key={item.id}
-                className={`glass-panel glass-panel-hover rounded-2xl p-6 border flex flex-col justify-between min-h-[230px] transition-all ${
+                className={`glass-panel glass-panel-hover rounded-2xl p-6 border-2 flex flex-col justify-between min-h-[230px] transition-all duration-200 ${
                   isSelected
-                    ? "border-cyan-500/40 bg-cyan-500/5 ring-1 ring-cyan-500/20"
+                    ? "border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-400/25 shadow-lg shadow-cyan-500/10"
                     : "border-slate-900"
                 }`}
                 onClick={selectionMode ? () => toggleSelection(item.id) : undefined}
