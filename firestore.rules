@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow public read and write access to the vocabulary collection and all subcollections
+    match /vocabulary/{document=**} {
+      allow read, write: if true;
+    }
+
+    // Default rule: block all other collections unless explicitly allowed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
