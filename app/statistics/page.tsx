@@ -212,33 +212,33 @@ export default function StatisticsPage() {
         <div className="glass-panel rounded-2xl p-6 border border-slate-900 bg-slate-950/40 backdrop-blur-md flex flex-col justify-between items-center text-center">
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-4">Active Recall Strength</span>
 
-          <div className="relative w-28 h-28 my-2 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90">
+          <div className="relative w-32 h-32 my-2 mx-auto flex items-center justify-center">
+            <svg className="w-32 h-32 transform -rotate-90 absolute top-0 left-0" viewBox="0 0 128 128">
               <circle
-                cx="56"
-                cy="56"
-                r="46"
+                cx="64"
+                cy="64"
+                r="54"
                 className="stroke-slate-900"
-                strokeWidth="7"
+                strokeWidth="8"
                 fill="transparent"
               />
               <circle
-                cx="56"
-                cy="56"
-                r="46"
+                cx="64"
+                cy="64"
+                r="54"
                 className="stroke-cyan-400"
-                strokeWidth="7"
+                strokeWidth="8"
                 fill="transparent"
-                strokeDasharray={2 * Math.PI * 46}
-                strokeDashoffset={2 * Math.PI * 46 * (1 - (accuracyHistory.total > 0 ? accuracyHistory.correct / accuracyHistory.total : 0.8))}
+                strokeDasharray={339.3}
+                strokeDashoffset={339.3 * (1 - (accuracyHistory.total > 0 ? accuracyHistory.correct / accuracyHistory.total : 0.8))}
                 strokeLinecap="round"
               />
             </svg>
-            <div className="absolute text-center">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 pointer-events-none">
               <span className="block text-2xl font-black text-slate-100 leading-none">
                 {accuracyHistory.total > 0 ? accuracyPercent : 85}%
               </span>
-              <span className="block text-[8px] text-slate-500 uppercase font-black tracking-widest mt-1">Accuracy</span>
+              <span className="block text-[9px] text-slate-500 uppercase font-black tracking-widest mt-1.5">Accuracy</span>
             </div>
           </div>
 

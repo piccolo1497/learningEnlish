@@ -623,33 +623,33 @@ function PracticePageContent() {
 
               {/* Accuracy score circle */}
               {sessionStats.total > 0 && (
-                <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90">
+                <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
+                  <svg className="w-32 h-32 transform -rotate-90 absolute top-0 left-0" viewBox="0 0 128 128">
                     <circle
-                      cx="56"
-                      cy="56"
-                      r="48"
+                      cx="64"
+                      cy="64"
+                      r="54"
                       className="stroke-slate-900"
                       strokeWidth="8"
                       fill="transparent"
                     />
                     <circle
-                      cx="56"
-                      cy="56"
-                      r="48"
+                      cx="64"
+                      cy="64"
+                      r="54"
                       className="stroke-emerald-400"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={301.6}
-                      strokeDashoffset={301.6 - (301.6 * (sessionStats.correct / sessionStats.total))}
+                      strokeDasharray={339.3}
+                      strokeDashoffset={339.3 - (339.3 * (sessionStats.correct / sessionStats.total))}
                       strokeLinecap="round"
                     />
                   </svg>
-                  <div className="absolute text-center">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 pointer-events-none">
                     <span className="block text-2xl font-black text-slate-100 leading-none">
                       {Math.round((sessionStats.correct / sessionStats.total) * 100)}%
                     </span>
-                    <span className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mt-1">Accuracy</span>
+                    <span className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mt-1.5">Accuracy</span>
                   </div>
                 </div>
               )}
