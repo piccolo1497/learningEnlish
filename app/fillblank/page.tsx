@@ -5,7 +5,7 @@ import Link from "next/link";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import {
-  ArrowLeft, PenLine, Check, X, Lightbulb,
+  ArrowLeft, Check, X, Lightbulb,
   SkipForward, RotateCcw, Trophy, BookOpen,
   ChevronRight, Eye, Flame, Target, Hash,
   RefreshCcw, Volume2
@@ -267,34 +267,34 @@ export default function FillBlankPage() {
   // ── Finished ─────────────────────────────────────────────────────────
   if (finished) {
     return (
-      <div className="min-h-screen bg-[#080d16] flex flex-col items-center justify-center p-8 gap-8">
-        <div className="flex flex-col items-center gap-3">
+      <div className="max-w-xl mx-auto space-y-6 text-center py-12">
+        <div className="flex flex-col items-center gap-4">
           <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-cyan-500/30">
-            <Trophy className="w-11 h-11 text-white" />
+            <Trophy className="w-11 h-11 text-white animate-bounce" />
           </div>
-          <h1 className="text-4xl font-black text-slate-100 tracking-tight">Round Complete!</h1>
-          <p className="text-slate-500 text-sm">{queue.length} words · Best streak 🔥{bestStreak}</p>
+          <h1 className="text-3xl font-black text-slate-100 tracking-tight">Round Complete!</h1>
+          <p className="text-slate-400 text-sm">{queue.length} words · Best streak 🔥{bestStreak}</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 w-full max-w-sm">
+        <div className="grid grid-cols-3 gap-4 w-full max-w-sm mx-auto">
           {[
-            { label: "Correct",  value: score.correct, color: "text-emerald-400", bg: "bg-emerald-500/8 border-emerald-500/20" },
-            { label: "Wrong",    value: score.wrong,   color: "text-rose-400",    bg: "bg-rose-500/8 border-rose-500/20"       },
-            { label: "Accuracy", value: `${accuracy}%`,color: "text-cyan-400",    bg: "bg-cyan-500/8 border-cyan-500/20"       },
+            { label: "Correct",  value: score.correct, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
+            { label: "Wrong",    value: score.wrong,   color: "text-rose-400",    bg: "bg-rose-500/10 border-rose-500/20"       },
+            { label: "Accuracy", value: `${accuracy}%`,color: "text-cyan-400",    bg: "bg-cyan-500/10 border-cyan-500/20"       },
           ].map((s) => (
-            <div key={s.label} className={`rounded-2xl border p-5 text-center ${s.bg}`}>
-              <div className={`text-3xl font-black ${s.color}`}>{s.value}</div>
-              <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-1">{s.label}</div>
+            <div key={s.label} className={`rounded-2xl border p-4 text-center ${s.bg}`}>
+              <div className={`text-2xl font-black ${s.color}`}>{s.value}</div>
+              <div className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider mt-1">{s.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex justify-center gap-3">
           <button onClick={() => startGame(allWords)}
-            className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 active:scale-95 transition-all shadow-lg shadow-cyan-500/20 cursor-pointer">
-            <RotateCcw className="w-4 h-4" /> Play Again
+            className="flex items-center gap-2 px-8 py-3.5 rounded-2xl text-sm font-black bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 hover:from-cyan-300 hover:to-blue-400 active:scale-95 transition-all shadow-lg shadow-cyan-500/20 cursor-pointer">
+            <RotateCcw className="w-4 h-4 text-slate-950 stroke-[2.5]" /> Play Again
           </button>
-          <Link href="/" className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all">
+          <Link href="/" className="flex items-center gap-2 px-8 py-3.5 rounded-2xl text-sm font-black bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> Back Home
           </Link>
         </div>
@@ -305,9 +305,9 @@ export default function FillBlankPage() {
   // ── Loading ───────────────────────────────────────────────────────────
   if (loading || !current) {
     return (
-      <div className="min-h-screen bg-[#080d16] flex items-center justify-center gap-3">
+      <div className="flex items-center justify-center gap-3 py-20">
         <div className="w-8 h-8 border-[3px] border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
-        <p className="text-sm text-slate-500 font-semibold">Loading vocabulary…</p>
+        <p className="text-sm text-slate-400 font-semibold">Preparing game queue…</p>
       </div>
     );
   }
@@ -318,319 +318,283 @@ export default function FillBlankPage() {
 
   // ── Game UI ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#080d16] text-slate-100 antialiased flex flex-col">
-
-      {/* ── Top Bar ── */}
-      <header className="flex items-center gap-0 h-14 border-b border-slate-900 bg-[#0a0f1d]/90 backdrop-blur-md shrink-0 sticky top-0 z-20">
-        {/* Back */}
-        <div className="flex items-center px-5 border-r border-slate-900 h-full">
-          <Link href="/" className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-200 transition-colors group">
-            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-            LexiVault
-          </Link>
-        </div>
-
-        {/* Title */}
-        <div className="flex items-center gap-2 px-5 border-r border-slate-900 h-full">
-          <PenLine className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-xs font-bold text-slate-200 tracking-wide">Fill in the Blank</span>
-        </div>
-
-        {/* Progress bar + counter */}
-        <div className="flex-1 flex items-center gap-4 px-5">
-          <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-700"
+    <div className="space-y-6">
+      
+      {/* Game Header: Progress & Scores */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-950/40 border border-slate-900">
+        <div className="flex-1 flex flex-col gap-1.5 min-w-[200px]">
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+            <span>Round Progress</span>
+            <span>{index + 1} / {queue.length}</span>
+          </div>
+          <div className="h-2 bg-slate-950 border border-slate-900 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all duration-700"
               style={{ width: `${progressPct}%` }} />
           </div>
-          <span className="text-[11px] font-bold text-slate-500 shrink-0">{index + 1} / {queue.length}</span>
         </div>
 
-        {/* Scores */}
-        <div className="flex items-center gap-2 px-5 border-l border-slate-900 h-full">
+        <div className="flex flex-wrap items-center gap-2">
           {streak >= 2 && (
-            <span className="flex items-center gap-1 text-[11px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-              <Flame className="w-3 h-3 fill-amber-400" /> {streak}
+            <span className="flex items-center gap-1.5 text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl">
+              <Flame className="w-3.5 h-3.5 fill-amber-400" /> {streak} Streak
             </span>
           )}
-          <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-            <Check className="w-3 h-3 stroke-[3]" /> {score.correct}
+          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl">
+            <Check className="w-3.5 h-3.5 stroke-[3]" /> {score.correct} Correct
           </span>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-full">
-            <X className="w-3 h-3 stroke-[3]" /> {score.wrong}
+          <span className="flex items-center gap-1.5 text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-xl">
+            <X className="w-3.5 h-3.5 stroke-[3]" /> {score.wrong} Wrong
+          </span>
+          <span className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-3 py-1.5 rounded-xl">
+            <Target className="w-3.5 h-3.5" /> {accuracy}% Accuracy
           </span>
         </div>
-      </header>
+      </div>
 
-      {/* ── Body: 2 columns ── */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* ── LEFT: Hint Panel ── */}
-        <aside className="hidden lg:flex flex-col w-[340px] xl:w-[400px] border-r border-slate-900 bg-[#0a0f1d]/60 p-8 gap-6 overflow-y-auto">
-
-          {/* Word meta */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider border ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}>
-                {typeStyle.label}
-              </span>
-              <span className={`flex items-center gap-1.5 text-[11px] font-bold ${diffStyle.text}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${diffStyle.dot}`} />
-                {current.difficulty}
-              </span>
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                <Hash className="w-3 h-3" />{current.word.replace(/\s+/g, "").length} chars
-              </span>
-            </div>
+      {/* Main Game Card */}
+      <div className="glass-panel rounded-3xl border border-slate-900 p-6 md:p-8 space-y-6 bg-gradient-to-b from-[#0a0f1d]/40 to-slate-950/20 backdrop-blur-md max-w-3xl mx-auto shadow-xl">
+        
+        {/* Card Header: Meta + word type */}
+        <div className="flex items-center justify-between border-b border-slate-900/60 pb-4">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}>
+              {typeStyle.label}
+            </span>
+            <span className={`flex items-center gap-1.5 text-[11px] font-bold ${diffStyle.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${diffStyle.dot}`} />
+              {current.difficulty}
+            </span>
           </div>
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+            <Hash className="w-3.5 h-3.5" /> {current.word.replace(/\s+/g, "").length} characters
+          </span>
+        </div>
 
-          {/* Meaning (the clue) */}
-          <div className="space-y-2">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 flex items-center gap-1.5">
-              <BookOpen className="w-3.5 h-3.5" /> English Meaning
-            </p>
-            <p className="text-lg text-slate-100 leading-relaxed font-medium">
-              {current.meaning}
-            </p>
-          </div>
+        {/* English Meaning (clue) */}
+        <div className="space-y-3">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+            <BookOpen className="w-3.5 h-3.5 text-cyan-400" /> English Meaning
+          </p>
+          <p className="text-xl md:text-2xl text-slate-100 font-black leading-relaxed">
+            {current.meaning}
+          </p>
+        </div>
 
+        {/* Hints Panel: Vietnamese & Letter Hints side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           {/* Vietnamese hint */}
-          <div className="space-y-2">
-            <button onClick={() => setShowViHint((v) => !v)}
-              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-600 hover:text-amber-400 transition-colors cursor-pointer">
+          <div className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5">
+            <button
+              onClick={() => setShowViHint((v) => !v)}
+              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+            >
               <Eye className="w-3.5 h-3.5" />
-              {showViHint ? "Hide" : "Show"} Vietnamese
+              {showViHint ? "Hide" : "Show"} Vietnamese Hint
             </button>
             {showViHint && (
-              <p className="text-base font-semibold text-amber-400 leading-snug">{current.vietnamese}</p>
+              <p className="text-base font-extrabold text-amber-400 transition-all animate-fade-in">{current.vietnamese}</p>
             )}
           </div>
 
           {/* Letter hint */}
-          <div className="space-y-2">
-            <button onClick={() => setShowLetterHint((v) => !v)}
-              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-600 hover:text-cyan-400 transition-colors cursor-pointer">
+          <div className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5">
+            <button
+              onClick={() => setShowLetterHint((v) => !v)}
+              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-cyan-400 transition-colors cursor-pointer"
+            >
               <Lightbulb className="w-3.5 h-3.5" />
-              {showLetterHint ? "Hide" : "Show"} letter hint
+              {showLetterHint ? "Hide" : "Show"} Letter Hint
             </button>
             {showLetterHint && (
-              <p className="font-mono text-lg text-cyan-400 tracking-[0.3em] leading-relaxed">{letterBlank(current.word)}</p>
+              <p className="font-mono text-base font-bold text-cyan-400 tracking-[0.25em] leading-relaxed transition-all animate-fade-in">{letterBlank(current.word)}</p>
             )}
           </div>
+        </div>
 
-          {/* Example — only after answer revealed */}
-          {answerRevealed && current.example && (
-            <div className="mt-auto pt-4 border-t border-slate-900">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-600 mb-1.5">Example</p>
-              <p className="text-sm text-slate-400 italic leading-relaxed">{current.example}</p>
+        {/* Input & feedback section */}
+        <div className="space-y-4 pt-2">
+          {/* Result state banner */}
+          {result === "correct" && (
+            <div className="flex items-center gap-3 px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 animate-scale-up">
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4 text-white stroke-[3]" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="font-bold text-emerald-400">Correct! 🎉</p>
+                    <p className="text-xs text-emerald-600 mt-0.5">
+                      {streak > 1 ? `🔥 ${streak} in a row!` : "Keep it up!"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => playPronunciation(current.word, "US")}
+                      className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-emerald-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" /> US
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playPronunciation(current.word, "UK")}
+                      className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-emerald-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" /> UK
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Stats mini */}
-          <div className="mt-auto pt-4 border-t border-slate-900 grid grid-cols-3 gap-2">
-            {[
-              { icon: Target, label: "Accuracy", val: `${accuracy}%`, color: "text-cyan-400" },
-              { icon: Check,  label: "Correct",  val: score.correct,  color: "text-emerald-400" },
-              { icon: X,      label: "Wrong",    val: score.wrong,    color: "text-rose-400" },
-            ].map((s) => (
-              <div key={s.label} className="bg-slate-950/50 border border-slate-900 rounded-xl p-3 text-center">
-                <div className={`text-xl font-black ${s.color}`}>{s.val}</div>
-                <div className="text-[10px] text-slate-600 font-bold uppercase tracking-wide mt-0.5">{s.label}</div>
+          {result === "wrong" && (
+            <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-rose-955/40 border border-rose-500/30 animate-scale-up">
+              <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center shrink-0 mt-0.5">
+                <X className="w-4 h-4 text-white stroke-[3]" />
               </div>
-            ))}
-          </div>
-        </aside>
-
-        {/* ── RIGHT: Input Area ── */}
-        <main className="flex-1 flex flex-col p-8 lg:p-12 xl:p-16 overflow-y-auto">
-
-          {/* Mobile: meaning shown here too */}
-          <div className="lg:hidden mb-6 p-5 rounded-2xl bg-slate-900/40 border border-slate-800">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-1.5">
-              <BookOpen className="w-3 h-3" /> Meaning
-            </p>
-            <p className="text-base text-slate-100 leading-relaxed">{current.meaning}</p>
-          </div>
-
-          {/* Main question area */}
-          <div className="flex-1 flex flex-col justify-center max-w-2xl">
-
-            <div className="mb-8">
-              <h2 className="text-3xl xl:text-4xl font-black text-slate-300 mb-2 tracking-tight">
-                What is the word?
-              </h2>
-              <p className="text-slate-600 text-sm">
-                Type the English word or phrase that matches the meaning shown on the left.
-              </p>
-            </div>
-
-            {/* Result state banner */}
-            {result === "correct" && (
-              <div className="flex items-center gap-3 mb-6 px-5 py-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
-                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                  <Check className="w-4 h-4 text-white stroke-[3]" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-emerald-400">Correct! 🎉</p>
-                      <p className="text-xs text-emerald-600 mt-0.5">
-                        {streak > 1 ? `🔥 ${streak} in a row!` : "Keep it up!"}
+              <div className="flex-1">
+                <div className="flex items-start justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="font-bold text-rose-455">{input.trim() ? "Not quite right." : "Skipped."}</p>
+                    {answerRevealed ? (
+                      <p className="text-sm text-slate-300 mt-1">
+                        Answer: <span className="font-black text-slate-100">{current.word}</span>
                       </p>
-                    </div>
+                    ) : (
+                      <button
+                        onClick={() => setAnswerRevealed(true)}
+                        className="mt-2 flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-2 transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Reveal answer
+                      </button>
+                    )}
+                  </div>
+                  {answerRevealed && (
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => playPronunciation(current.word, "US")}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-emerald-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-rose-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                       >
                         <Volume2 className="w-3.5 h-3.5" /> US
                       </button>
                       <button
                         type="button"
                         onClick={() => playPronunciation(current.word, "UK")}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-emerald-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-rose-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                       >
                         <Volume2 className="w-3.5 h-3.5" /> UK
                       </button>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={result !== null}
+                placeholder="Type your answer here…"
+                autoComplete="off"
+                className={`w-full px-5 py-4 text-base font-semibold rounded-2xl border-2 focus:outline-none transition-all duration-200
+                  ${result === "correct"
+                    ? "bg-emerald-955/20 border-emerald-500/50 text-emerald-300 cursor-not-allowed"
+                    : result === "wrong"
+                    ? "bg-rose-955/20 border-rose-500/40 text-rose-300 cursor-not-allowed"
+                    : "bg-slate-900/40 border-slate-800 text-slate-100 focus:border-cyan-500/60 placeholder-slate-600 hover:border-slate-700"
+                  }`}
+              />
+            </div>
+
+            {/* Action buttons */}
+            {result === null && (
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold
+                    bg-gradient-to-r from-cyan-550 to-blue-600 text-white
+                    hover:from-cyan-400 hover:to-blue-500
+                    disabled:opacity-30 disabled:cursor-not-allowed
+                    active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-cyan-500/15"
+                >
+                  <Check className="w-4 h-4 stroke-[2.5]" /> Check Answer
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSkip}
+                  className="flex items-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-bold
+                    text-slate-400 bg-slate-900/70 hover:bg-slate-800 hover:text-slate-200
+                    border border-slate-800 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <SkipForward className="w-4 h-4" /> Skip
+                </button>
+              </div>
+            )}
+
+            {result === "correct" && (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold
+                  bg-gradient-to-r from-emerald-500 to-teal-605 text-white
+                  hover:from-emerald-400 hover:to-teal-500
+                  active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-emerald-500/15"
+              >
+                Next Word <ChevronRight className="w-4 h-4" />
+              </button>
             )}
 
             {result === "wrong" && (
-              <div className="flex items-start gap-3 mb-6 px-5 py-4 rounded-2xl bg-rose-950/40 border border-rose-500/30">
-                <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <X className="w-4 h-4 text-white stroke-[3]" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-bold text-rose-400">{input.trim() ? "Not quite right." : "Skipped."}</p>
-                      {answerRevealed ? (
-                        <p className="text-sm text-slate-300 mt-1">
-                          Answer: <span className="font-black text-slate-100">{current.word}</span>
-                        </p>
-                      ) : (
-                        <button
-                          onClick={() => setAnswerRevealed(true)}
-                          className="mt-2 flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-2 transition-colors cursor-pointer">
-                          <Eye className="w-3.5 h-3.5" /> Reveal answer
-                        </button>
-                      )}
-                    </div>
-                    {answerRevealed && (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => playPronunciation(current.word, "US")}
-                          className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-rose-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                        >
-                          <Volume2 className="w-3.5 h-3.5" /> US
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => playPronunciation(current.word, "UK")}
-                          className="flex items-center gap-1.5 text-xs font-bold text-slate-350 hover:text-rose-400 hover:bg-slate-800 bg-slate-900 border border-slate-800/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                        >
-                          <Volume2 className="w-3.5 h-3.5" /> UK
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Input form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="relative">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  disabled={result !== null}
-                  placeholder="Type your answer here…"
-                  autoComplete="off"
-                  className={`w-full px-5 py-4 text-base font-semibold rounded-2xl border-2 focus:outline-none transition-all duration-200
-                    ${result === "correct"
-                      ? "bg-emerald-950/30 border-emerald-500/50 text-emerald-300 cursor-not-allowed"
-                      : result === "wrong"
-                      ? "bg-rose-950/20 border-rose-500/40 text-rose-300 cursor-not-allowed"
-                      : "bg-slate-900/60 border-slate-700 text-slate-100 focus:border-cyan-500/60 placeholder-slate-600 hover:border-slate-600"
-                    }`}
-                />
-              </div>
-
-              {/* Action buttons */}
-              {result === null && (
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={!input.trim()}
-                    className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
-                      bg-gradient-to-r from-cyan-500 to-blue-600 text-white
-                      hover:from-cyan-400 hover:to-blue-500
-                      disabled:opacity-30 disabled:cursor-not-allowed
-                      active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-cyan-500/15">
-                    <Check className="w-4 h-4 stroke-[2.5]" /> Check Answer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSkip}
-                    className="flex items-center gap-2 px-5 py-4 rounded-2xl text-sm font-bold
-                      text-slate-400 bg-slate-900/70 hover:bg-slate-800 hover:text-slate-200
-                      border border-slate-800 active:scale-[0.98] transition-all cursor-pointer">
-                    <SkipForward className="w-4 h-4" /> Skip
-                  </button>
-                </div>
-              )}
-
-              {result === "correct" && (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleTryAgain}
+                  className="flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold
+                    text-amber-400 bg-amber-500/10 hover:bg-amber-500/15
+                    border border-amber-500/25 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <RefreshCcw className="w-4 h-4" /> Try Again
+                </button>
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
-                    bg-gradient-to-r from-emerald-500 to-teal-600 text-white
-                    hover:from-emerald-400 hover:to-teal-500
-                    active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-emerald-500/15">
+                  className="flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold
+                    text-slate-200 bg-slate-800 hover:bg-slate-700
+                    border border-slate-700 active:scale-[0.98] transition-all cursor-pointer"
+                >
                   Next Word <ChevronRight className="w-4 h-4" />
                 </button>
-              )}
+              </div>
+            )}
+          </form>
+        </div>
 
-              {result === "wrong" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={handleTryAgain}
-                    className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
-                      text-amber-400 bg-amber-500/10 hover:bg-amber-500/15
-                      border border-amber-500/25 active:scale-[0.98] transition-all cursor-pointer">
-                    <RefreshCcw className="w-4 h-4" /> Try Again
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold
-                      text-slate-200 bg-slate-800 hover:bg-slate-700
-                      border border-slate-700 active:scale-[0.98] transition-all cursor-pointer">
-                    Next Word <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </form>
-
-            {/* Restart */}
-            <div className="mt-10">
-              <button
-                onClick={() => startGame(allWords)}
-                className="flex items-center gap-1.5 text-[11px] text-slate-700 hover:text-slate-400 transition-colors cursor-pointer">
-                <RotateCcw className="w-3 h-3" /> Restart with new shuffle
-              </button>
-            </div>
+        {/* Example revealed at the bottom */}
+        {answerRevealed && current.example && (
+          <div className="pt-6 border-t border-slate-900/80 space-y-2 animate-fade-in">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Example Sentence</p>
+            <p className="text-sm md:text-base text-slate-300 italic leading-relaxed">{current.example}</p>
           </div>
-        </main>
+        )}
+
+        {/* Restart */}
+        <div className="pt-4 text-center">
+          <button
+            onClick={() => startGame(allWords)}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-650 hover:text-slate-400 transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Restart with new shuffle
+          </button>
+        </div>
       </div>
     </div>
   );
