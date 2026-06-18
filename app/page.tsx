@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import {
   collection,
   onSnapshot,
@@ -150,13 +150,79 @@ export default function Home() {
 
   // Sync with Firebase Firestore
   useEffect(() => {
+    if (!isFirebaseConfigured || !db) {
+      // Offline fallback: load from localStorage
+      const saved = localStorage.getItem("lexivault_words");
+      if (saved) {
+        try {
+          setWords(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse local storage words:", e);
+        }
+      } else {
+        // Load default starter words
+        const defaultWords: VocabItem[] = [
+          {
+            id: "default-1",
+            word: "ephemeral",
+            type: "word",
+            wordTypes: ["adj"],
+            pronunciationUS: "/ɪˈfemərəl/",
+            pronunciationUK: "/ɪˈfemərəl/",
+            meaning: "lasting for a very short time",
+            vietnamese: "phù du, chóng tàn",
+            example: "Fame in the world of pop music is often ephemeral.",
+            difficulty: "hard",
+            nextReview: "Today",
+            bookmarked: true,
+            streak: 0,
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: "default-2",
+            word: "serendipity",
+            type: "word",
+            wordTypes: ["noun"],
+            pronunciationUS: "/ˌserənˈdɪpədi/",
+            pronunciationUK: "/ˌserənˈdɪpɪti/",
+            meaning: "the occurrence of events by chance in a happy or beneficial way",
+            vietnamese: "sự tình cờ may mắn",
+            example: "We found the charming little restaurant by pure serendipity.",
+            difficulty: "medium",
+            nextReview: "Today",
+            bookmarked: false,
+            streak: 0,
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: "default-3",
+            word: "break a leg",
+            type: "idiom",
+            meaning: "good luck",
+            vietnamese: "chúc may mắn",
+            example: "Go out there and break a leg tonight!",
+            difficulty: "easy",
+            nextReview: "Today",
+            bookmarked: false,
+            streak: 0,
+            createdAt: new Date().toISOString()
+          }
+        ];
+        setWords(defaultWords);
+        localStorage.setItem("lexivault_words", JSON.stringify(defaultWords));
+      }
+      setLoading(false);
+      setDbError(null);
+      return;
+    }
+
     const types: VocabItem["type"][] = ["word", "phrase", "idiom", "native_daily_phrase"];
     const loadedTypes = new Set<string>();
     const typeWords: Record<string, VocabItem[]> = {};
 
     const unsubscribes = types.map((type) => {
       return onSnapshot(
-        collection(db, "vocabulary", type, "items"),
+        collection(db!, "vocabulary", type, "items"),
         (snapshot) => {
           const items: VocabItem[] = [];
           snapshot.forEach((d) => {
@@ -442,8 +508,19 @@ export default function Home() {
   const handleToggleBookmark = async (id: string) => {
     const item = words.find((w) => w.id === id);
     if (!item) return;
+
+    if (!db) {
+      const updatedWords = words.map((w) =>
+        w.id === id ? { ...w, bookmarked: !w.bookmarked } : w
+      );
+      setWords(updatedWords);
+      localStorage.setItem("lexivault_words", JSON.stringify(updatedWords));
+      showToast(item.bookmarked ? "Removed bookmark" : "Bookmarked!");
+      return;
+    }
+
     try {
-      await setDoc(doc(db, "vocabulary", item.type, "items", id), {
+      await setDoc(doc(db!, "vocabulary", item.type, "items", id), {
         ...item,
         bookmarked: !item.bookmarked
       });
@@ -455,8 +532,16 @@ export default function Home() {
   // Delete a word in Firestore
   const handleDeleteWord = async (item: VocabItem) => {
     if (typeof window !== "undefined" && window.confirm("Are you sure you want to delete this vocabulary item?")) {
+      if (!db) {
+        const updatedWords = words.filter((w) => w.id !== item.id);
+        setWords(updatedWords);
+        localStorage.setItem("lexivault_words", JSON.stringify(updatedWords));
+        showToast(`"${item.word}" deleted successfully!`);
+        return;
+      }
+
       try {
-        await deleteDoc(doc(db, "vocabulary", item.type, "items", item.id));
+        await deleteDoc(doc(db!, "vocabulary", item.type, "items", item.id));
       } catch (err) {
         console.error("Error deleting word from Firebase:", err);
       }
@@ -503,8 +588,19 @@ export default function Home() {
       if (formPronunciationUK.trim()) newItem.pronunciationUK = formPronunciationUK.trim();
     }
 
+    if (!db) {
+      const updatedWords = [...words, newItem];
+      setWords(updatedWords);
+      localStorage.setItem("lexivault_words", JSON.stringify(updatedWords));
+      setIsAddModalOpen(false);
+      setCurrentTab("dashboard");
+      setAccuracyHistory(prev => ({ ...prev, total: prev.total + 1 }));
+      showToast(`"${formWord}" added successfully!`);
+      return;
+    }
+
     try {
-      await setDoc(doc(db, "vocabulary", formType, "items", newId), newItem);
+      await setDoc(doc(db!, "vocabulary", formType, "items", newId), newItem);
       setIsAddModalOpen(false);
       setCurrentTab("dashboard");
       setAccuracyHistory(prev => ({ ...prev, total: prev.total + 1 }));
@@ -565,47 +661,59 @@ export default function Home() {
   // Actual database update executor
   const executeUpdateWord = async () => {
     if (!selectedWord) return;
-    try {
-      const updatedItem: VocabItem = {
-        ...selectedWord,
-        word: formWord,
-        type: formType,
-        meaning: formMeaning,
-        vietnamese: formVietnamese,
-        example: formExample,
-        difficulty: formDifficulty,
-      };
 
-      if (formType !== "native_daily_phrase" && formWordTypes.length > 0) {
-        updatedItem.wordTypes = formWordTypes;
-      } else {
-        updatedItem.wordTypes = [];
-      }
-      delete updatedItem.wordType;
+    const updatedItem: VocabItem = {
+      ...selectedWord,
+      word: formWord,
+      type: formType,
+      meaning: formMeaning,
+      vietnamese: formVietnamese,
+      example: formExample,
+      difficulty: formDifficulty,
+    };
 
-      if (formType !== "native_daily_phrase") {
-        if (formPronunciationUS.trim()) {
-          updatedItem.pronunciationUS = formPronunciationUS.trim();
-        } else {
-          delete updatedItem.pronunciationUS;
-        }
-        if (formPronunciationUK.trim()) {
-          updatedItem.pronunciationUK = formPronunciationUK.trim();
-        } else {
-          delete updatedItem.pronunciationUK;
-        }
+    if (formType !== "native_daily_phrase" && formWordTypes.length > 0) {
+      updatedItem.wordTypes = formWordTypes;
+    } else {
+      updatedItem.wordTypes = [];
+    }
+    delete updatedItem.wordType;
+
+    if (formType !== "native_daily_phrase") {
+      if (formPronunciationUS.trim()) {
+        updatedItem.pronunciationUS = formPronunciationUS.trim();
       } else {
         delete updatedItem.pronunciationUS;
+      }
+      if (formPronunciationUK.trim()) {
+        updatedItem.pronunciationUK = formPronunciationUK.trim();
+      } else {
         delete updatedItem.pronunciationUK;
       }
-      delete updatedItem.pronunciation;
+    } else {
+      delete updatedItem.pronunciationUS;
+      delete updatedItem.pronunciationUK;
+    }
+    delete updatedItem.pronunciation;
 
+    if (!db) {
+      const updatedWords = words.map((w) => w.id === selectedWord.id ? updatedItem : w);
+      setWords(updatedWords);
+      localStorage.setItem("lexivault_words", JSON.stringify(updatedWords));
+      setIsEditModalOpen(false);
+      setSelectedWord(null);
+      setCurrentTab("dashboard");
+      showToast(`"${formWord}" updated successfully!`);
+      return;
+    }
+
+    try {
       if (selectedWord.type !== formType) {
         // Type changed, delete from old subcollection
-        await deleteDoc(doc(db, "vocabulary", selectedWord.type, "items", selectedWord.id));
+        await deleteDoc(doc(db!, "vocabulary", selectedWord.type, "items", selectedWord.id));
       }
 
-      await setDoc(doc(db, "vocabulary", formType, "items", selectedWord.id), updatedItem);
+      await setDoc(doc(db!, "vocabulary", formType, "items", selectedWord.id), updatedItem);
       setIsEditModalOpen(false);
       setSelectedWord(null);
       setCurrentTab("dashboard");
@@ -643,12 +751,47 @@ export default function Home() {
       ? futureDate.toISOString().split("T")[0]
       : "Today";
 
+    const updatedItem = {
+      ...currentPracticeItem,
+      streak: newStreak,
+      nextReview: reviewLabel,
+    };
+
+    if (!db) {
+      const updatedWords = words.map((w) => w.id === currentPracticeItem.id ? updatedItem : w);
+      setWords(updatedWords);
+      localStorage.setItem("lexivault_words", JSON.stringify(updatedWords));
+
+      // Update metrics
+      if (known) {
+        setDailyProgress((prev) => Math.min(prev + 1, dailyGoal));
+        setAccuracyHistory((prev) => ({
+          correct: prev.correct + 1,
+          total: prev.total + 1,
+        }));
+      } else {
+        setAccuracyHistory((prev) => ({
+          ...prev,
+          total: prev.total + 1,
+        }));
+      }
+
+      // Move next
+      setShowPracticeMeaning(false);
+      if (reviewWords.length > 1) {
+        setPracticeIndex((prev) => (prev + 1) % reviewWords.length);
+      } else {
+        setPracticeIndex(0);
+      }
+
+      if (dailyProgress + 1 === dailyGoal) {
+        setStreak((prev) => prev + 1);
+      }
+      return;
+    }
+
     try {
-      await setDoc(doc(db, "vocabulary", currentPracticeItem.type, "items", currentPracticeItem.id), {
-        ...currentPracticeItem,
-        streak: newStreak,
-        nextReview: reviewLabel,
-      });
+      await setDoc(doc(db!, "vocabulary", currentPracticeItem.type, "items", currentPracticeItem.id), updatedItem);
 
       // Update metrics
       if (known) {
@@ -965,11 +1108,41 @@ export default function Home() {
           )}
 
           {dbError && (
-            <div className="flex items-center gap-2.5 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
-              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-2.5 p-4 rounded-xl bg-[#1c1212] border border-rose-500/20 text-rose-400 text-xs font-semibold">
+              <Info className="w-4 h-4 text-rose-400 shrink-0" />
               <span>
-                Database connection: {dbError}. Running in Offline Fallback Mode. Please make sure to allow read/write rules in your Firebase Firestore settings.
+                Database connection error: {dbError}. Running in Offline Fallback Mode. Please check your Firestore rules and network connectivity.
               </span>
+            </div>
+          )}
+
+          {!isFirebaseConfigured && (
+            <div className="flex items-start gap-3.5 p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
+              <Info className="w-4.5 h-4.5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="font-extrabold text-[13px]">LexiVault Database Connection Not Configured</p>
+                <p className="text-slate-300 leading-relaxed">
+                  The application is running in <strong>Offline Demo Mode</strong> using LocalStorage. Any vocabulary you add, edit, bookmark, or practice will be saved locally in your browser.
+                </p>
+                <p className="text-slate-400 leading-relaxed">
+                  To connect your persistent LexiVault Cloud database on Vercel:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400 pl-1">
+                  <li>Go to <strong>Project Settings &rarr; Environment Variables</strong> in your Vercel Dashboard.</li>
+                  <li>Add the following variables with values from your Firebase Console:
+                    <code className="block mt-1 p-2 bg-slate-950/75 border border-slate-900 rounded-lg text-[10px] text-cyan-400 font-mono space-y-0.5">
+                      NEXT_PUBLIC_FIREBASE_API_KEY<br />
+                      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN<br />
+                      NEXT_PUBLIC_FIREBASE_PROJECT_ID<br />
+                      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET<br />
+                      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID<br />
+                      NEXT_PUBLIC_FIREBASE_APP_ID<br />
+                      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+                    </code>
+                  </li>
+                  <li>Redeploy your application.</li>
+                </ol>
+              </div>
             </div>
           )}
 

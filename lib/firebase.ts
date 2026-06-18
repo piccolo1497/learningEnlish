@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getFirestore, Firestore } from "firebase/firestore";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -12,12 +12,28 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase (safely checks if app is already initialized on server-side/client-side)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// Check if config is valid (at least apiKey and projectId are present)
+export const isFirebaseConfigured = !!(
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+);
 
-export const db = getFirestore(app);
+let app: FirebaseApp | null = null;
+let db: Firestore | null = null;
+
+if (isFirebaseConfigured) {
+  try {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    db = getFirestore(app);
+  } catch (error) {
+    console.error("Failed to initialize Firebase:", error);
+  }
+}
+
+export { app, db };
 
 // Initialize Analytics conditionally for clients supporting it
-export const analyticsPromise = typeof window !== "undefined"
-  ? isSupported().then((yes) => (yes ? getAnalytics(app) : null)).catch(() => null)
+export const analyticsPromise = typeof window !== "undefined" && app
+  ? isSupported().then((yes) => (yes && app ? getAnalytics(app) : null)).catch(() => null)
   : Promise.resolve(null);
+

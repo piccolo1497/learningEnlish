@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import {
   ArrowLeft, PenLine, Check, X, Lightbulb,
@@ -144,18 +144,74 @@ export default function FillBlankPage() {
 
   // Firebase load
   useEffect(() => {
+    if (!isFirebaseConfigured || !db) {
+      // Offline fallback: load from localStorage
+      const saved = localStorage.getItem("lexivault_words");
+      if (saved) {
+        try {
+          setAllWords(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to parse local storage words in fillblank:", e);
+        }
+      } else {
+        // Load default starter words
+        const defaultWords: VocabItem[] = [
+          {
+            id: "default-1",
+            word: "ephemeral",
+            type: "word",
+            meaning: "lasting for a very short time",
+            vietnamese: "phù du, chóng tàn",
+            difficulty: "hard",
+          },
+          {
+            id: "default-2",
+            word: "serendipity",
+            type: "word",
+            meaning: "the occurrence of events by chance in a happy or beneficial way",
+            vietnamese: "sự tình cờ may mắn",
+            difficulty: "medium",
+          },
+          {
+            id: "default-3",
+            word: "break a leg",
+            type: "idiom",
+            meaning: "good luck",
+            vietnamese: "chúc may mắn",
+            difficulty: "easy",
+          }
+        ];
+        setAllWords(defaultWords);
+      }
+      setLoading(false);
+      return;
+    }
+
     const types = ["word", "phrase", "idiom", "native_daily_phrase"] as const;
     const loaded: Record<string, VocabItem[]> = {};
     const seen = new Set<string>();
     const unsubs = types.map((t) =>
-      onSnapshot(collection(db, "vocabulary", t, "items"), (snap) => {
-        loaded[t] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VocabItem));
-        seen.add(t);
-        if (seen.size === types.length) {
-          setAllWords(Object.values(loaded).flat());
+      onSnapshot(
+        collection(db!, "vocabulary", t, "items"), 
+        (snap) => {
+          loaded[t] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VocabItem));
+          seen.add(t);
+          if (seen.size === types.length) {
+            setAllWords(Object.values(loaded).flat());
+            setLoading(false);
+          }
+        },
+        (error) => {
+          console.error(`Firestore loading error in fillblank for ${t}:`, error);
+          const saved = localStorage.getItem("lexivault_words");
+          if (saved) {
+            try {
+              setAllWords(JSON.parse(saved));
+            } catch (e) {}
+          }
           setLoading(false);
         }
-      })
+      )
     );
     return () => unsubs.forEach((u) => u());
   }, []);
