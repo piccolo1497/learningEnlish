@@ -3,118 +3,10 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useVocab, VocabItem } from "@/app/context/VocabContext";
-import { Clock, Check, Volume2 } from "lucide-react";
-
-// Styling Helpers
-const getTypeBadge = (type: string) => {
-  switch (type) {
-    case "word":
-      return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
-    case "phrase":
-      return "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
-    case "idiom":
-      return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
-    case "native_daily_phrase":
-      return "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
-
-const getDifficultyBadge = (difficulty: string) => {
-  switch (difficulty) {
-    case "easy":
-      return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-    case "medium":
-      return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
-    case "hard":
-      return "bg-rose-500/10 text-rose-400 border border-rose-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
-
-const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "word":
-      return "Word";
-    case "phrase":
-      return "Phrase";
-    case "idiom":
-      return "Idiom";
-    case "native_daily_phrase":
-      return "Native Speaker";
-    default:
-      return type;
-  }
-};
-
-const cleanWordForSpeech = (str: string): string => {
-  let cleaned = str;
-  cleaned = cleaned.replace(/^\s*\(to\)\s*/i, "");
-  cleaned = cleaned.replace(/\([^)]*\)/g, " ");
-  if (cleaned.includes("/")) {
-    cleaned = cleaned.split("/")[0];
-  }
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
-};
-
-const playPronunciation = (word: string, accent: "US" | "UK") => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-
-  const speak = () => {
-    const cleanWord = cleanWordForSpeech(word);
-    if (!cleanWord) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanWord);
-    utterance.lang = accent === "US" ? "en-US" : "en-GB";
-    utterance.rate = 0.95;
-
-    const voices = window.speechSynthesis.getVoices();
-    const targetLang = accent === "US" ? "en-us" : "en-gb";
-
-    let voice = voices.find(v => {
-      const l = v.lang.toLowerCase().replace("_", "-");
-      return l === targetLang || l.startsWith(targetLang + "-");
-    });
-
-    if (!voice) {
-      voice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        const lang = v.lang.toLowerCase();
-        if (lang.startsWith("en")) {
-          if (accent === "US") {
-            return name.includes("us") || name.includes("united states") || name.includes("david") || name.includes("zira") || name.includes("samantha");
-          } else {
-            return name.includes("gb") || name.includes("uk") || name.includes("united kingdom") || name.includes("hazel") || name.includes("daniel");
-          }
-        }
-        return false;
-      });
-    }
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  } else {
-    speak();
-  }
-};
-
 import { db } from "@/lib/firebase";
 import { collection, getDocs, writeBatch, doc } from "firebase/firestore";
+import { getTypeBadge, getDifficultyBadge, getTypeLabel, playPronunciation } from "@/lib/helpers";
+import { Clock, Check, Volume2 } from "lucide-react";
 
 export default function ReviewPage() {
   const router = useRouter();
@@ -173,7 +65,7 @@ export default function ReviewPage() {
         </div>
         {reviewWords.length > 0 && (
           <button
-            onClick={() => router.push("/practice")}
+            onClick={() => router.push("/practice?source=review")}
             className="px-4 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 active:scale-95 transition-all cursor-pointer shadow-md"
           >
             Launch Interactive Flashcards
@@ -186,7 +78,7 @@ export default function ReviewPage() {
           {reviewWords.map((item) => (
             <div
               key={item.id}
-              className="glass-panel glass-panel-hover rounded-xl p-4 border border-slate-900 flex flex-col justify-between min-h-[180px]"
+              className="liquid-card p-5 flex flex-col justify-between min-h-[190px]"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -269,7 +161,7 @@ export default function ReviewPage() {
 
                 <button
                   onClick={() => {
-                    router.push(`/practice?id=${item.id}`);
+                    router.push(`/practice?id=${item.id}&source=review`);
                   }}
                   className="px-2.5 py-1 rounded-md text-[12px] font-bold bg-slate-950 hover:bg-cyan-500/20 text-slate-200 hover:text-cyan-400 border border-slate-900 hover:border-cyan-500/20 transition-all cursor-pointer"
                 >

@@ -15,6 +15,7 @@ import {
   DocumentSnapshot,
   getCountFromServer
 } from "firebase/firestore";
+import { getTypeBadge, getDifficultyBadge, getTypeLabel, playPronunciation } from "@/lib/helpers";
 import {
   Library,
   Star,
@@ -33,57 +34,30 @@ import {
   Hash
 } from "lucide-react";
 
-// Styling Helpers
-const getTypeBadge = (type: string) => {
-  switch (type) {
-    case "word":
-      return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
-    case "phrase":
-      return "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
-    case "idiom":
-      return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
-    case "native_daily_phrase":
-      return "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
-
-const getDifficultyBadge = (difficulty: string) => {
-  switch (difficulty) {
-    case "easy":
-      return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-    case "medium":
-      return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
-    case "hard":
-      return "bg-rose-500/10 text-rose-400 border border-rose-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
+// Library-specific styling helpers
 
 const getTabStyles = (type: string, isActive: boolean) => {
   switch (type) {
     case "all":
       return isActive
         ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30 shadow-md shadow-cyan-500/5"
-        : "text-slate-400 hover:text-cyan-300 border-slate-900 hover:border-cyan-500/10 hover:bg-cyan-500/5";
+        : "text-slate-400 hover:text-cyan-200 border-slate-900 hover:border-cyan-400/40 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/10";
     case "word":
       return isActive
         ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30 shadow-md shadow-indigo-500/5"
-        : "text-slate-400 hover:text-indigo-300 border-slate-900 hover:border-indigo-500/10 hover:bg-indigo-500/5";
+        : "text-slate-400 hover:text-indigo-200 border-slate-900 hover:border-indigo-400/40 hover:bg-gradient-to-r hover:from-indigo-500/20 hover:to-purple-500/10";
     case "phrase":
       return isActive
-        ? "bg-cyan-500/15 text-cyan-305 border-cyan-500/30 shadow-md shadow-cyan-500/5"
-        : "text-slate-400 hover:text-cyan-300 border-slate-900 hover:border-cyan-500/10 hover:bg-cyan-500/5";
+        ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/30 shadow-md shadow-cyan-500/5"
+        : "text-slate-400 hover:text-cyan-200 border-slate-900 hover:border-cyan-400/40 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-teal-500/10";
     case "idiom":
       return isActive
         ? "bg-purple-500/15 text-purple-300 border-purple-500/30 shadow-md shadow-purple-500/5"
-        : "text-slate-400 hover:text-purple-300 border-slate-900 hover:border-purple-500/10 hover:bg-purple-500/5";
+        : "text-slate-400 hover:text-purple-200 border-slate-900 hover:border-purple-400/40 hover:bg-gradient-to-r hover:from-purple-500/20 hover:to-pink-500/10";
     case "native_daily_phrase":
       return isActive
         ? "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30 shadow-md shadow-fuchsia-500/5"
-        : "text-slate-400 hover:text-fuchsia-300 border-slate-900 hover:border-fuchsia-500/10 hover:bg-fuchsia-500/5";
+        : "text-slate-400 hover:text-fuchsia-200 border-slate-900 hover:border-fuchsia-400/40 hover:bg-gradient-to-r hover:from-fuchsia-500/20 hover:to-rose-500/10";
     default:
       return "text-slate-400 hover:text-white";
   }
@@ -131,85 +105,6 @@ const getWordFontSizeClass = (size: string) => {
   }
 };
 
-const cleanWordForSpeech = (str: string): string => {
-  let cleaned = str;
-  cleaned = cleaned.replace(/^\s*\(to\)\s*/i, "");
-  cleaned = cleaned.replace(/\([^)]*\)/g, " ");
-  if (cleaned.includes("/")) {
-    cleaned = cleaned.split("/")[0];
-  }
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
-};
-
-const playPronunciation = (word: string, accent: "US" | "UK") => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-
-  const speak = () => {
-    const cleanWord = cleanWordForSpeech(word);
-    if (!cleanWord) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanWord);
-    utterance.lang = accent === "US" ? "en-US" : "en-GB";
-    utterance.rate = 0.95;
-
-    const voices = window.speechSynthesis.getVoices();
-    const targetLang = accent === "US" ? "en-us" : "en-gb";
-
-    let voice = voices.find(v => {
-      const l = v.lang.toLowerCase().replace("_", "-");
-      return l === targetLang || l.startsWith(targetLang + "-");
-    });
-
-    if (!voice) {
-      voice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        const lang = v.lang.toLowerCase();
-        if (lang.startsWith("en")) {
-          if (accent === "US") {
-            return name.includes("us") || name.includes("united states") || name.includes("david") || name.includes("zira") || name.includes("samantha");
-          } else {
-            return name.includes("gb") || name.includes("uk") || name.includes("united kingdom") || name.includes("hazel") || name.includes("daniel");
-          }
-        }
-        return false;
-      });
-    }
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  } else {
-    speak();
-  }
-};
-
-const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "word":
-      return "Word";
-    case "phrase":
-      return "Phrase";
-    case "idiom":
-      return "Idiom";
-    case "native_daily_phrase":
-      return "Native Speaker";
-    default:
-      return type;
-  }
-};
-
 interface Cursors {
   word: DocumentSnapshot | null;
   phrase: DocumentSnapshot | null;
@@ -226,110 +121,89 @@ function LibraryPageContent() {
     counts,
     wordFontSize,
     toggleBookmark,
-    deleteWord,
+    triggerDelete,
     setIsAddModalOpen,
     setIsEditModalOpen,
     setSelectedWord,
     refreshCounts,
-    reviewWords
+    reviewWords,
+    lastUpdated
   } = useVocab();
 
   // Filters state
   const [activeTab, setActiveTab] = useState<"all" | "word" | "phrase" | "idiom" | "native_daily_phrase">("all");
   const [starredOnly, setStarredOnly] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Scroll detection to make sticky filter bar dynamic
+  useEffect(() => {
+    const mainEl = document.querySelector("main");
+    if (!mainEl) return;
+
+    const handleScroll = () => {
+      const scrolled = mainEl.scrollTop > 20;
+      setIsScrolled(prev => {
+        if (prev !== scrolled) return scrolled;
+        return prev;
+      });
+    };
+
+    handleScroll();
+    mainEl.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      mainEl.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<{ [id: string]: boolean }>({});
   const [showPracticeModal, setShowPracticeModal] = useState(false);
 
   const toggleSelection = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+    setSelectedIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
   };
 
   const clearSelection = () => {
-    setSelectedIds(new Set());
+    setSelectedIds({});
     setSelectionMode(false);
   };
 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageData, setPageData] = useState<{ [page: number]: VocabItem[] }>({});
-  const [totalItemsCount, setTotalItemsCount] = useState<number | null>(null);
-  const [expandedPhrases, setExpandedPhrases] = useState<{ [id: string]: boolean }>({});
-  
-  // Performance optimized pagination controls (using refs to avoid hook dependency triggers)
-  const cursorsRef = useRef<{ [page: number]: Cursors }>({
-    0: { word: null, phrase: null, idiom: null, native_daily_phrase: null }
-  });
-  const isLoadingRef = useRef(false);
 
-  const [hasMore, setHasMore] = useState(true);
+  // Sorting state
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "alphabetical" | "hardest" | "medium" | "easiest">("newest");
+
+  // Items state
+  const [fetchedItems, setFetchedItems] = useState<VocabItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [expandedPhrases, setExpandedPhrases] = useState<{ [id: string]: boolean }>({});
 
-  // Clear cache and reset page on filter changes
+  // Reset page and expanded phrases on filter changes
   useEffect(() => {
     setCurrentPage(1);
-    setPageData({});
-    cursorsRef.current = {
-      0: { word: null, phrase: null, idiom: null, native_daily_phrase: null }
-    };
-    setHasMore(true);
-    setTotalItemsCount(null);
     setExpandedPhrases({});
-  }, [activeTab, starredOnly, searchQuery]);
+  }, [activeTab, starredOnly, searchQuery, sortBy]);
 
   // Combined fetch function
-  const fetchPage = useCallback(async (page: number) => {
-    if (isLoadingRef.current) return;
-    isLoadingRef.current = true;
+  const fetchItems = useCallback(async () => {
     setLoadingItems(true);
-
     try {
-      const prevCursors = cursorsRef.current[page - 1] || { word: null, phrase: null, idiom: null, native_daily_phrase: null };
-
-      // Offline / Local storage fallback check
       if (!db) {
         const saved = localStorage.getItem("lexivault_words");
         if (saved) {
           try {
             let all: VocabItem[] = JSON.parse(saved);
-            
-            // Apply filters
             if (activeTab !== "all") {
               all = all.filter(w => w.type === activeTab);
             }
             if (starredOnly) {
               all = all.filter(w => w.bookmarked);
             }
-            if (searchQuery.trim()) {
-              const q = searchQuery.toLowerCase().trim();
-              all = all.filter(w =>
-                w.word.toLowerCase().includes(q) ||
-                w.meaning.toLowerCase().includes(q) ||
-                w.vietnamese.toLowerCase().includes(q) ||
-                w.example?.toLowerCase().includes(q)
-              );
-            }
-
-            setTotalItemsCount(all.length);
-
-            // Sort by creation date desc
-            all.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-
-            const startIndex = (page - 1) * 10;
-            const sliced = all.slice(startIndex, startIndex + 10);
-
-            setPageData(prev => ({ ...prev, [page]: sliced }));
-            setHasMore(startIndex + 10 < all.length);
+            setFetchedItems(all);
           } catch (e) {
             console.error("Local storage parse error in library:", e);
           }
@@ -337,196 +211,108 @@ function LibraryPageContent() {
         return;
       }
 
-      // 1. Search Mode: Fetch all (up to 100) and paginate client-side to allow deep text search
-      if (searchQuery.trim()) {
-        const types = activeTab === "all"
-          ? (["word", "phrase", "idiom", "native_daily_phrase"] as const)
-          : [activeTab] as const;
-
-        const allFetched: VocabItem[] = [];
-        await Promise.all(
-          types.map(async (t) => {
-            let q = query(
-              collection(db!, "vocabulary", t, "items"),
-              orderBy("createdAt", "desc"),
-              limit(100)
-            );
-            if (starredOnly) {
-              q = query(
-                collection(db!, "vocabulary", t, "items"),
-                where("bookmarked", "==", true),
-                orderBy("createdAt", "desc"),
-                limit(100)
-              );
-            }
-            const snap = await getDocs(q);
-            snap.forEach((d) => {
-              allFetched.push({ id: d.id, ...d.data() } as VocabItem);
-            });
-          })
-        );
-
-        // Sort combined search list
-        allFetched.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-
-        // Apply client side substring filter
-        const q = searchQuery.toLowerCase().trim();
-        const filtered = allFetched.filter(w =>
-          w.word.toLowerCase().includes(q) ||
-          w.meaning.toLowerCase().includes(q) ||
-          w.vietnamese.toLowerCase().includes(q) ||
-          (w.example && w.example.toLowerCase().includes(q))
-        );
-
-        setTotalItemsCount(filtered.length);
-
-        const startIndex = (page - 1) * 10;
-        const sliced = filtered.slice(startIndex, startIndex + 10);
-
-        setPageData(prev => ({ ...prev, [page]: sliced }));
-        setHasMore(startIndex + 10 < filtered.length);
-        return;
-      }
-
-      // 2. Normal Mode: Server-side pagination
-      if (totalItemsCount === null) {
-        if (starredOnly) {
-          const types = activeTab === "all"
-            ? (["word", "phrase", "idiom", "native_daily_phrase"] as const)
-            : [activeTab] as const;
-          let totalStarred = 0;
-          await Promise.all(
-            types.map(async (t) => {
-              const q = query(
-                collection(db!, "vocabulary", t, "items"),
-                where("bookmarked", "==", true)
-              );
-              const snap = await getCountFromServer(q);
-              totalStarred += snap.data().count;
-            })
-          );
-          setTotalItemsCount(totalStarred);
-        } else {
-          setTotalItemsCount(counts[activeTab]);
-        }
-      }
-
-      const typesToQuery = activeTab === "all"
+      const types = activeTab === "all"
         ? (["word", "phrase", "idiom", "native_daily_phrase"] as const)
         : [activeTab] as const;
 
-      const collectionsDocs: { [key: string]: { doc: DocumentSnapshot; item: VocabItem }[] } = {};
-
+      const allFetched: VocabItem[] = [];
       await Promise.all(
-        typesToQuery.map(async (t) => {
+        types.map(async (t) => {
           let q = query(
             collection(db!, "vocabulary", t, "items"),
-            orderBy("createdAt", "desc"),
-            limit(10)
+            limit(300)
           );
-
           if (starredOnly) {
             q = query(
               collection(db!, "vocabulary", t, "items"),
               where("bookmarked", "==", true),
-              orderBy("createdAt", "desc"),
-              limit(10)
+              limit(300)
             );
           }
-
-          // Apply pagination cursor
-          const currentCursor = prevCursors[t];
-          if (currentCursor) {
-            if (starredOnly) {
-              q = query(
-                collection(db!, "vocabulary", t, "items"),
-                where("bookmarked", "==", true),
-                orderBy("createdAt", "desc"),
-                startAfter(currentCursor),
-                limit(10)
-              );
-            } else {
-              q = query(
-                collection(db!, "vocabulary", t, "items"),
-                orderBy("createdAt", "desc"),
-                startAfter(currentCursor),
-                limit(10)
-              );
-            }
-          }
-
           const snap = await getDocs(q);
-          const docsArr: { doc: DocumentSnapshot; item: VocabItem }[] = [];
           snap.forEach((d) => {
-            docsArr.push({
-              doc: d,
-              item: { id: d.id, ...d.data() } as VocabItem
-            });
+            allFetched.push({ id: d.id, ...d.data(), type: t } as VocabItem);
           });
-          collectionsDocs[t] = docsArr;
         })
       );
-
-      // Merge and sort
-      let merged: { doc: DocumentSnapshot; item: VocabItem; type: string }[] = [];
-      Object.keys(collectionsDocs).forEach((typeKey) => {
-        collectionsDocs[typeKey].forEach((entry) => {
-          merged.push({ ...entry, type: typeKey });
-        });
-      });
-
-      // Sort combined results by createdAt desc
-      merged.sort((a, b) => new Date(b.item.createdAt || 0).getTime() - new Date(a.item.createdAt || 0).getTime());
-
-      // Slice the top 10
-      const selectedTop10 = merged.slice(0, 10);
-      const itemsToRender = selectedTop10.map(m => m.item);
-
-      // Calculate next cursors
-      const nextCursors: Cursors = { ...prevCursors };
-      selectedTop10.forEach((m) => {
-        nextCursors[m.type as keyof Cursors] = m.doc;
-      });
-
-      cursorsRef.current[page] = nextCursors;
-      setPageData(prev => ({ ...prev, [page]: itemsToRender }));
-
-      // If we got exactly 10 merged items, check if there might be more
-      setHasMore(selectedTop10.length === 10);
+      setFetchedItems(allFetched);
     } catch (err) {
-      console.error("Firestore pagination error:", err);
+      console.error("Error fetching library items:", err);
     } finally {
-      isLoadingRef.current = false;
       setLoadingItems(false);
     }
-  }, [activeTab, starredOnly, searchQuery, counts]);
+  }, [activeTab, starredOnly, lastUpdated]);
 
-  // Fetch page if not cached
+  // Fetch items when active tab or starred toggle changes
   useEffect(() => {
-    if (!pageData[currentPage]) {
-      fetchPage(currentPage);
-    }
-  }, [currentPage, pageData, fetchPage]);
+    fetchItems();
+  }, [fetchItems]);
 
-  const computedTotalItems = useMemo(() => {
-    if (!db) {
-      return totalItemsCount;
+  // Helper weight function for difficulty sorting
+  const getDifficultyWeight = (difficulty?: string) => {
+    switch (difficulty?.toLowerCase()) {
+      case "easy": return 1;
+      case "medium": return 2;
+      case "hard": return 3;
+      default: return 2; // Default to medium weight
     }
+  };
+
+  // Helper sorting function
+  const getSortedItems = useCallback((items: VocabItem[]) => {
+    const sorted = [...items];
+    switch (sortBy) {
+      case "newest":
+        sorted.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        break;
+      case "oldest":
+        sorted.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        break;
+      case "alphabetical":
+        sorted.sort((a, b) => (a.word || "").localeCompare(b.word || ""));
+        break;
+      case "hardest":
+        sorted.sort((a, b) => getDifficultyWeight(b.difficulty) - getDifficultyWeight(a.difficulty));
+        break;
+      case "easiest":
+        sorted.sort((a, b) => getDifficultyWeight(a.difficulty) - getDifficultyWeight(b.difficulty));
+        break;
+      case "medium":
+        sorted.sort((a, b) => {
+          const distA = Math.abs(getDifficultyWeight(a.difficulty) - 2);
+          const distB = Math.abs(getDifficultyWeight(b.difficulty) - 2);
+          if (distA !== distB) {
+            return distA - distB; // Medium (0) comes first
+          }
+          return getDifficultyWeight(b.difficulty) - getDifficultyWeight(a.difficulty);
+        });
+        break;
+      default:
+        break;
+    }
+    return sorted;
+  }, [sortBy]);
+
+  // Processed, filtered, and sorted items list
+  const processedItems = useMemo(() => {
+    let items = [...fetchedItems];
     if (searchQuery.trim()) {
-      return totalItemsCount;
+      const q = searchQuery.toLowerCase().trim();
+      items = items.filter(w =>
+        w.word.toLowerCase().includes(q) ||
+        w.meaning.toLowerCase().includes(q) ||
+        w.vietnamese.toLowerCase().includes(q) ||
+        (w.example && w.example.toLowerCase().includes(q))
+      );
     }
-    if (starredOnly) {
-      return totalItemsCount;
-    }
-    return counts[activeTab];
-  }, [db, searchQuery, starredOnly, activeTab, counts, totalItemsCount]);
+    return getSortedItems(items);
+  }, [fetchedItems, searchQuery, getSortedItems]);
 
-  const totalPages = computedTotalItems !== null ? Math.max(1, Math.ceil(computedTotalItems / 10)) : 1;
-  const hasMoreComputed = computedTotalItems !== null ? currentPage < totalPages : hasMore;
+  const computedTotalItems = processedItems.length;
+  const totalPages = Math.max(1, Math.ceil(computedTotalItems / 10));
+  const hasMoreComputed = currentPage < totalPages;
 
   const getPageNumbers = () => {
-    if (computedTotalItems === null) return [currentPage];
-    
     const pages = [];
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) {
@@ -534,14 +320,11 @@ function LibraryPageContent() {
       }
     } else {
       pages.push(1);
-      
       if (currentPage > 3) {
         pages.push("...");
       }
-      
       const start = Math.max(2, currentPage - 1);
       const end = Math.min(totalPages - 1, currentPage + 1);
-      
       let adjustedStart = start;
       let adjustedEnd = end;
       if (currentPage <= 3) {
@@ -550,17 +333,14 @@ function LibraryPageContent() {
       if (currentPage >= totalPages - 2) {
         adjustedStart = totalPages - 3;
       }
-      
       for (let i = adjustedStart; i <= adjustedEnd; i++) {
         if (!pages.includes(i)) {
           pages.push(i);
         }
       }
-      
       if (currentPage < totalPages - 2) {
         pages.push("...");
       }
-      
       if (!pages.includes(totalPages)) {
         pages.push(totalPages);
       }
@@ -568,7 +348,6 @@ function LibraryPageContent() {
     return pages;
   };
 
-  // Navigations
   const handlePrevPage = () => {
     if (currentPage > 1) {
       setCurrentPage(p => p - 1);
@@ -581,38 +360,28 @@ function LibraryPageContent() {
     }
   };
 
-  const currentItems = pageData[currentPage] || [];
+  const currentItems = useMemo(() => {
+    const start = (currentPage - 1) * 10;
+    return processedItems.slice(start, start + 10);
+  }, [processedItems, currentPage]);
 
-  // Selection helpers (placed after currentItems and pageData are declared)
   const toggleSelectAll = () => {
-    if (currentItems.every(item => selectedIds.has(item.id))) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        currentItems.forEach(item => next.delete(item.id));
-        return next;
+    const allOnPageSelected = currentItems.length > 0 && currentItems.every(item => selectedIds[item.id]);
+    setSelectedIds(prev => {
+      const next = { ...prev };
+      currentItems.forEach(item => {
+        next[item.id] = !allOnPageSelected;
       });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        currentItems.forEach(item => next.add(item.id));
-        return next;
-      });
-    }
+      return next;
+    });
   };
 
   const getSelectedItems = useCallback((): VocabItem[] => {
-    const items: VocabItem[] = [];
-    const seenIds = new Set<string>();
-    Object.values(pageData).forEach(pageItems => {
-      pageItems.forEach(item => {
-        if (selectedIds.has(item.id) && !seenIds.has(item.id)) {
-          items.push(item);
-          seenIds.add(item.id);
-        }
-      });
-    });
-    return items;
-  }, [pageData, selectedIds]);
+    return fetchedItems.filter(item => selectedIds[item.id]);
+  }, [fetchedItems, selectedIds]);
+
+  const selectedCount = Object.keys(selectedIds).filter(id => selectedIds[id]).length;
+
 
   const handleStartPractice = (mode: "flashcard" | "fillblank") => {
     const items = getSelectedItems();
@@ -629,17 +398,76 @@ function LibraryPageContent() {
   return (
     <div className="space-y-6">
       
-      {/* Library Header Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-slate-950/40 border border-slate-900">
-        <div className="flex items-center gap-3">
-          <div className="space-y-0.5">
-            <h2 className="text-xl font-bold text-slate-100">Library Words</h2>
-            <p className="text-[13px] text-slate-400">
-              Explore and query words, phrases, and idioms. Use filters to adjust catalog.
-            </p>
+      {/* Library Title */}
+      <div className="space-y-0.5">
+        <h2 className="text-xl font-bold text-slate-100">Library Words</h2>
+        <p className="text-[13px] text-slate-400">
+          Explore and query words, phrases, and idioms. Use filters to adjust catalog.
+        </p>
+      </div>
+
+      {/* Sticky Filter Bar */}
+      <div 
+        className={`sticky top-0 z-30 flex items-center justify-between gap-4 p-3 rounded-2xl transition-all duration-300 ease-in-out border ${
+          isScrolled 
+            ? "bg-[#0a0f1d]/95 backdrop-blur-xl border-cyan-400/60 shadow-[0_8px_30px_rgba(6,182,212,0.25)] scale-[0.98] translate-y-1" 
+            : "bg-[#080d16]/90 backdrop-blur-md border-slate-700/80 scale-100 translate-y-0"
+        } overflow-x-auto flex-nowrap scrollbar-thin`}
+      >
+        {/* Category Pill Filters */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 border border-slate-900 rounded-xl shrink-0 flex-nowrap">
+          {(["all", "word", "phrase", "idiom", "native_daily_phrase"] as const).map((t) => {
+            const isActive = activeTab === t;
+            const count = counts[t as keyof typeof counts] || 0;
+            return (
+              <button
+                key={t}
+                onClick={() => setActiveTab(t)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border cursor-pointer whitespace-nowrap flex items-center gap-2 ${getTabStyles(t, isActive)}`}
+              >
+                <span>{t === "all" ? "All" : getTypeLabel(t)}</span>
+                <span className={`px-2 py-0.5 text-[11px] rounded-md font-black transition-all ${getCountBadgeStyles(t, isActive)}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right side controls (Starred, Sort & Select Toggles) */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+          {/* Starred Toggle */}
+          {/* Starred Toggle */}
+          <button
+            onClick={() => setStarredOnly(!starredOnly)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+              starredOnly
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-gradient-to-r hover:from-amber-500/20 hover:to-amber-500/10 hover:border-amber-400/50"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-300 hover:border-amber-500/30 hover:bg-gradient-to-r hover:from-amber-500/15 hover:to-yellow-500/5"
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${starredOnly ? "fill-amber-400" : ""}`} />
+            <span>Starred</span>
+          </button>
+
+          {/* Sort Selector */}
+          <div className="relative shrink-0 flex items-center">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-xl text-xs font-bold border bg-slate-900 border-slate-800 text-slate-300 hover:text-cyan-200 hover:border-cyan-500/30 hover:bg-gradient-to-r hover:from-cyan-500/10 hover:to-blue-500/5 transition-all cursor-pointer outline-none focus:border-cyan-500/50"
+            >
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="alphabetical">A–Z</option>
+              <option value="hardest">Hardest</option>
+              <option value="medium">Medium</option>
+              <option value="easiest">Easiest</option>
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          {/* Selection Mode Toggle — next to heading */}
+          {/* Select Toggle */}
           <button
             onClick={() => {
               if (selectionMode) {
@@ -648,49 +476,14 @@ function LibraryPageContent() {
                 setSelectionMode(true);
               }
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               selectionMode
-                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/10 hover:border-cyan-400/50"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-gradient-to-r hover:from-cyan-500/15 hover:to-blue-500/5"
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5" />
             <span>{selectionMode ? "Cancel" : "Select"}</span>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Category Pill Filters with counts */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 border border-slate-900 rounded-xl overflow-x-auto max-w-full">
-            {(["all", "word", "phrase", "idiom", "native_daily_phrase"] as const).map((t) => {
-              const isActive = activeTab === t;
-              const count = counts[t as keyof typeof counts] || 0;
-              return (
-                <button
-                  key={t}
-                  onClick={() => setActiveTab(t)}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all border cursor-pointer whitespace-nowrap flex items-center gap-2.5 ${getTabStyles(t, isActive)}`}
-                >
-                  <span>{t === "all" ? "All" : getTypeLabel(t)}</span>
-                  <span className={`px-2 py-0.5 text-[13px] rounded-md font-black transition-all ${getCountBadgeStyles(t, isActive)}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Starred Toggle */}
-          <button
-            onClick={() => setStarredOnly(!starredOnly)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-              starredOnly
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Star className={`w-3.5 h-3.5 ${starredOnly ? "fill-amber-450" : ""}`} />
-            <span>Starred</span>
           </button>
         </div>
       </div>
@@ -727,19 +520,19 @@ function LibraryPageContent() {
                   onClick={toggleSelectAll}
                   className="flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer transition-colors"
                 >
-                  {currentItems.length > 0 && currentItems.every(item => selectedIds.has(item.id))
+                  {currentItems.length > 0 && currentItems.every(item => selectedIds[item.id])
                     ? <CheckSquare className="w-4 h-4" />
                     : <Square className="w-4 h-4" />
                   }
                   <span>Select All on Page</span>
                 </button>
                 <span className="text-[11px] text-slate-400 font-semibold">
-                  {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
+                  {selectedCount} item{selectedCount !== 1 ? "s" : ""} selected
                 </span>
               </div>
-              {selectedIds.size > 0 && (
+              {selectedCount > 0 && (
                 <button
-                  onClick={() => setSelectedIds(new Set())}
+                  onClick={() => setSelectedIds({})}
                   className="text-[11px] text-slate-500 hover:text-slate-300 font-bold cursor-pointer transition-colors"
                 >
                   Clear All
@@ -750,17 +543,26 @@ function LibraryPageContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {currentItems.map((item) => {
-              const isSelected = selectedIds.has(item.id);
+              const isSelected = !!selectedIds[item.id];
               return (
               <div
                 key={item.id}
-                className={`glass-panel glass-panel-hover rounded-2xl p-6 border-2 flex flex-col justify-between min-h-[230px] transition-all duration-200 ${
+                className={`liquid-card p-6 flex flex-col justify-between min-h-[230px] transition-all duration-200 ${
                   isSelected
-                    ? "border-cyan-400 bg-cyan-500/10 ring-2 ring-cyan-400/25 shadow-lg shadow-cyan-500/10"
-                    : "border-slate-900"
+                    ? "shadow-lg shadow-cyan-500/25 scale-[1.01]"
+                    : ""
                 }`}
-                onClick={selectionMode ? () => toggleSelection(item.id) : undefined}
-                style={selectionMode ? { cursor: "pointer" } : undefined}
+                onClick={() => {
+                  if (selectionMode) {
+                    toggleSelection(item.id);
+                  }
+                }}
+                style={{
+                  cursor: selectionMode ? "pointer" : undefined,
+                  borderColor: isSelected ? "#22d3ee" : undefined,
+                  background: isSelected ? "rgba(6, 182, 212, 0.18)" : undefined,
+                  boxShadow: isSelected ? "0 0 15px rgba(6, 182, 212, 0.25)" : undefined,
+                }}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
@@ -789,21 +591,15 @@ function LibraryPageContent() {
                       </span>
                     </div>
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         await toggleBookmark(item);
-                        if (starredOnly) {
-                          setPageData(prev => ({
-                            ...prev,
-                            [currentPage]: prev[currentPage].filter(w => w.id !== item.id)
-                          }));
-                          setTotalItemsCount(prev => (prev !== null ? Math.max(0, prev - 1) : null));
-                        } else {
-                          // Refresh the current page's bookmark representation locally
-                          setPageData(prev => ({
-                            ...prev,
-                            [currentPage]: prev[currentPage].map(w => w.id === item.id ? { ...w, bookmarked: !w.bookmarked } : w)
-                          }));
-                        }
+                        setFetchedItems(prev => {
+                          if (starredOnly) {
+                            return prev.filter(w => w.id !== item.id);
+                          }
+                          return prev.map(w => w.id === item.id ? { ...w, bookmarked: !w.bookmarked } : w);
+                        });
                       }}
                       className="text-slate-500 hover:text-amber-400 transition-colors p-0.5 rounded cursor-pointer"
                     >
@@ -817,10 +613,10 @@ function LibraryPageContent() {
                     {/* US & UK Play Pronunciations for all types, including Native Daily Phrase */}
                     <div className="flex flex-wrap gap-2">
                       {/* US Pronunciation */}
-                      <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-0.5 rounded-lg border border-slate-850">
-                        <span className="text-[9px] font-black text-slate-500">US</span>
+                      <div className="flex items-center gap-1.5 bg-slate-900/60 px-2.5 py-1 rounded-xl border border-slate-850">
+                        <span className="text-[11px] font-black text-slate-400">US</span>
                         {item.type !== "native_daily_phrase" && (
-                          <span className="text-[11px] font-medium text-slate-400">
+                          <span className="text-[13px] font-semibold text-slate-200">
                             {item.pronunciationUS || "N/A"}
                           </span>
                         )}
@@ -829,18 +625,18 @@ function LibraryPageContent() {
                             e.stopPropagation();
                             playPronunciation(item.word, "US");
                           }}
-                          className="p-0.5 rounded text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                          className="p-1 rounded text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer hover:bg-slate-800/40"
                           title="Listen US"
                         >
-                          <Volume2 className="w-3 h-3" />
+                          <Volume2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
                       {/* UK Pronunciation */}
-                      <div className="flex items-center gap-1 bg-slate-900/50 px-2 py-0.5 rounded-lg border border-slate-850">
-                        <span className="text-[9px] font-black text-slate-500">UK</span>
+                      <div className="flex items-center gap-1.5 bg-slate-900/60 px-2.5 py-1 rounded-xl border border-slate-850">
+                        <span className="text-[11px] font-black text-slate-400">UK</span>
                         {item.type !== "native_daily_phrase" && (
-                          <span className="text-[11px] font-medium text-slate-400">
+                          <span className="text-[13px] font-semibold text-slate-200">
                             {item.pronunciationUK || "N/A"}
                           </span>
                         )}
@@ -849,10 +645,10 @@ function LibraryPageContent() {
                             e.stopPropagation();
                             playPronunciation(item.word, "UK");
                           }}
-                          className="p-0.5 rounded text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                          className="p-1 rounded text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer hover:bg-slate-800/40"
                           title="Listen UK"
                         >
-                          <Volume2 className="w-3 h-3" />
+                          <Volume2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -867,7 +663,7 @@ function LibraryPageContent() {
                   </p>
 
                   {item.example && (
-                    <p className="text-slate-350 text-[14px] italic leading-relaxed border-l-2 border-cyan-500/30 pl-3 mt-3.5 py-0.5">
+                    <p className="text-slate-100 text-[14.5px] italic leading-relaxed border-l-2 border-cyan-400 pl-3.5 mt-3.5 py-0.5">
                       &ldquo;{item.example}&rdquo;
                     </p>
                   )}
@@ -875,8 +671,11 @@ function LibraryPageContent() {
                   {item.commonPhrases && (
                     <div className="mt-3.5 border-t border-slate-900/60 pt-3">
                       <button
-                        onClick={() => setExpandedPhrases(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                        className="flex items-center gap-1.5 text-[10px] font-black text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-wider cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedPhrases(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                        }}
+                        className="flex items-center gap-1.5 text-[10px] font-black text-cyan-300 hover:text-cyan-200 transition-colors uppercase tracking-wider cursor-pointer"
                       >
                         <span>Common Phrases ({item.commonPhrases.split("\n").filter(l => l.trim()).length})</span>
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expandedPhrases[item.id] ? "rotate-180" : ""}`} />
@@ -885,7 +684,7 @@ function LibraryPageContent() {
                       {expandedPhrases[item.id] && (
                         <div className="flex flex-wrap gap-1.5 mt-2.5 animate-scale-up">
                           {item.commonPhrases.split("\n").filter(line => line.trim()).map((phrase, idx) => (
-                            <span key={idx} className="px-2 py-0.5 rounded bg-cyan-500/5 text-cyan-400 border border-cyan-500/10 text-[11px] font-medium">
+                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-cyan-950/50 text-cyan-200 border border-cyan-500/30 text-[12px] font-semibold">
                               {phrase}
                             </span>
                           ))}
@@ -902,7 +701,8 @@ function LibraryPageContent() {
 
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedWord(item);
                         setIsEditModalOpen(true);
                       }}
@@ -912,15 +712,12 @@ function LibraryPageContent() {
                       <Edit3 className="w-4.5 h-4.5" />
                     </button>
                     <button
-                      onClick={async () => {
-                        await deleteWord(item);
-                        // Refresh state after deletion
-                        setPageData(prev => ({
-                          ...prev,
-                          [currentPage]: prev[currentPage].filter(w => w.id !== item.id)
-                        }));
-                        setTotalItemsCount(prev => (prev !== null ? Math.max(0, prev - 1) : null));
-                        refreshCounts();
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerDelete(item, () => {
+                          setFetchedItems(prev => prev.filter(w => w.id !== item.id));
+                          refreshCounts();
+                        });
                       }}
                       className="p-1.5 text-slate-400 hover:text-rose-400 rounded hover:bg-slate-900 cursor-pointer"
                       title="Delete"
@@ -928,8 +725,9 @@ function LibraryPageContent() {
                       <Trash2 className="w-4.5 h-4.5" />
                     </button>
                     <button
-                      onClick={() => {
-                        router.push(`/practice?id=${item.id}`);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/practice?id=${item.id}&source=library`);
                       }}
                       className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-400 rounded-md border border-slate-800 transition-all cursor-pointer"
                     >
@@ -993,10 +791,10 @@ function LibraryPageContent() {
       )}
 
       {/* Floating Selection Action Bar */}
-      {selectionMode && selectedIds.size > 0 && (
+      {selectionMode && selectedCount > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-cyan-500/25 shadow-2xl shadow-cyan-500/10">
           <span className="text-sm font-bold text-slate-200">
-            {selectedIds.size} selected
+            {selectedCount} selected
           </span>
           <div className="w-px h-6 bg-slate-800" />
           <button
@@ -1028,7 +826,7 @@ function LibraryPageContent() {
               <div>
                 <h3 className="text-lg font-black text-slate-100">Choose Practice Mode</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected for practice
+                  {selectedCount} item{selectedCount !== 1 ? "s" : ""} selected for practice
                 </p>
               </div>
               <button

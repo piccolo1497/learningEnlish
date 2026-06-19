@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useVocab, VocabItem } from "@/app/context/VocabContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { getTypeBadge, getDifficultyBadge, getTypeLabel, playPronunciation, shuffleArray } from "@/lib/helpers";
 import {
   BrainCircuit,
   Volume2,
@@ -22,128 +23,12 @@ import {
   ChevronLeft
 } from "lucide-react";
 
-// Styling helpers
-const getTypeBadge = (type: string) => {
-  switch (type) {
-    case "word":
-      return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
-    case "phrase":
-      return "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
-    case "idiom":
-      return "bg-purple-500/10 text-purple-400 border border-purple-500/20";
-    case "native_daily_phrase":
-      return "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
-
-const getDifficultyBadge = (difficulty: string) => {
-  switch (difficulty) {
-    case "easy":
-      return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-    case "medium":
-      return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
-    case "hard":
-      return "bg-rose-500/10 text-rose-400 border border-rose-500/20";
-    default:
-      return "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  }
-};
-
-const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "word":
-      return "Word";
-    case "phrase":
-      return "Phrase";
-    case "idiom":
-      return "Idiom";
-    case "native_daily_phrase":
-      return "Native Speaker";
-    default:
-      return type;
-  }
-};
-
-const cleanWordForSpeech = (str: string): string => {
-  let cleaned = str;
-  cleaned = cleaned.replace(/^\s*\(to\)\s*/i, "");
-  cleaned = cleaned.replace(/\([^)]*\)/g, " ");
-  if (cleaned.includes("/")) {
-    cleaned = cleaned.split("/")[0];
-  }
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
-};
-
-const playPronunciation = (word: string, accent: "US" | "UK") => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-
-  const speak = () => {
-    const cleanWord = cleanWordForSpeech(word);
-    if (!cleanWord) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanWord);
-    utterance.lang = accent === "US" ? "en-US" : "en-GB";
-    utterance.rate = 0.95;
-
-    const voices = window.speechSynthesis.getVoices();
-    const targetLang = accent === "US" ? "en-us" : "en-gb";
-
-    let voice = voices.find(v => {
-      const l = v.lang.toLowerCase().replace("_", "-");
-      return l === targetLang || l.startsWith(targetLang + "-");
-    });
-
-    if (!voice) {
-      voice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        const lang = v.lang.toLowerCase();
-        if (lang.startsWith("en")) {
-          if (accent === "US") {
-            return name.includes("us") || name.includes("united states") || name.includes("david") || name.includes("zira") || name.includes("samantha");
-          } else {
-            return name.includes("gb") || name.includes("uk") || name.includes("united kingdom") || name.includes("hazel") || name.includes("daniel");
-          }
-        }
-        return false;
-      });
-    }
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  } else {
-    speak();
-  }
-};
-
-function shuffleArray<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
 function PracticePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const singleId = searchParams.get("id");
-  const librarySource = searchParams.get("source") === "library";
+  const source = searchParams.get("source");
+  const librarySource = source === "library";
 
   const {
     words,
@@ -151,9 +36,26 @@ function PracticePageContent() {
     dailyProgress,
     dailyGoal,
     updatePracticeProgress,
-    deleteWord,
-    showToast
+    triggerDelete,
+    showToast,
+    lastUpdated,
+    wordFontSize
   } = useVocab();
+
+  const getPracticeWordSizeClass = (size: string) => {
+    switch (size) {
+      case "small":
+        return "text-xl sm:text-2xl lg:text-3xl";
+      case "medium":
+        return "text-2xl sm:text-3xl lg:text-4xl";
+      case "large":
+        return "text-3xl sm:text-4xl lg:text-5xl";
+      case "xlarge":
+        return "text-4xl sm:text-5xl lg:text-6xl";
+      default:
+        return "text-2xl sm:text-3xl lg:text-4xl";
+    }
+  };
 
   // Setup options states
   const [isConfigured, setIsConfigured] = useState(false);
@@ -189,7 +91,7 @@ function PracticePageContent() {
           types.map(async (t) => {
             const snap = await getDocs(collection(db!, "vocabulary", t, "items"));
             snap.forEach((d) => {
-              fetched.push({ id: d.id, ...d.data() } as VocabItem);
+              fetched.push({ id: d.id, ...d.data(), type: t } as VocabItem);
             });
           })
         );
@@ -204,7 +106,7 @@ function PracticePageContent() {
 
   useEffect(() => {
     fetchCatalog();
-  }, [fetchCatalog, words]);
+  }, [fetchCatalog]);
 
   // Compute matching count in real time for config preview
   const matchingCount = useMemo(() => {
@@ -270,7 +172,7 @@ function PracticePageContent() {
           const docRef = doc(db, "vocabulary", t, "items", id);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
-            card = { id: docSnap.id, ...docSnap.data() } as VocabItem;
+            card = { id: docSnap.id, ...docSnap.data(), type: t } as VocabItem;
             break;
           }
         }
@@ -318,12 +220,48 @@ function PracticePageContent() {
         candidates = candidates.filter(w => w.difficulty === selectedDifficulty);
       }
 
-      // Shuffle
-      let finalQueue = shuffleArray(candidates);
+      // Load practiced IDs from localStorage to avoid overlaps
+      let practicedIds: Set<string>;
+      try {
+        const savedPracticed = localStorage.getItem("lexivault_practiced_ids");
+        practicedIds = new Set(savedPracticed ? JSON.parse(savedPracticed) : []);
+      } catch {
+        practicedIds = new Set();
+      }
 
-      // Slice to Session Size Limit
-      if (sessionLimit > 0 && finalQueue.length > sessionLimit) {
-        finalQueue = finalQueue.slice(0, sessionLimit);
+      // Filter candidates that are unpracticed in the current cycle
+      let unpracticed = candidates.filter(c => !practicedIds.has(c.id));
+      let practiced = candidates.filter(c => practicedIds.has(c.id));
+
+      let finalQueue: VocabItem[] = [];
+      const limitVal = sessionLimit > 0 ? sessionLimit : candidates.length;
+
+      if (unpracticed.length >= limitVal) {
+        // We have enough unpracticed words, take them
+        finalQueue = shuffleArray(unpracticed).slice(0, limitVal);
+        // Mark as practiced
+        finalQueue.forEach(item => practicedIds.add(item.id));
+      } else {
+        // We don't have enough unpracticed words. Take all of them
+        finalQueue = shuffleArray(unpracticed);
+        
+        // Draw the remaining needed from the beginning (recycled from practiced list)
+        const needed = limitVal - finalQueue.length;
+        if (practiced.length > 0) {
+          const recycled = shuffleArray(practiced).slice(0, needed);
+          finalQueue = [...finalQueue, ...recycled];
+        }
+        
+        // Reset practiced cycle to only contain the words in the new queue
+        practicedIds.clear();
+        finalQueue.forEach(item => practicedIds.add(item.id));
+      }
+
+      // Save updated practiced IDs
+      try {
+        localStorage.setItem("lexivault_practiced_ids", JSON.stringify(Array.from(practicedIds)));
+      } catch (err) {
+        console.error("Failed to save practiced IDs:", err);
       }
 
       setPracticeQueue(finalQueue);
@@ -365,8 +303,15 @@ function PracticePageContent() {
   };
 
   const handleRestart = () => {
-    setIsConfigured(false);
-    setSessionFinished(false);
+    if (source === "review") {
+      router.push("/review");
+    } else if (source === "library") {
+      router.push("/library");
+    } else {
+      setIsConfigured(false);
+      setSessionFinished(false);
+      router.push("/practice");
+    }
   };
 
   const activeCard = practiceQueue[practiceIndex];
@@ -376,6 +321,24 @@ function PracticePageContent() {
       {!isConfigured ? (
         /* PRACTICE SETUP CONFIGURATION VIEW */
         <div className="space-y-6 animate-scale-up">
+          {source && (
+            <div className="flex justify-start">
+              <button
+                onClick={handleRestart}
+                className="flex items-center gap-1.5 text-xs font-bold text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>
+                  {source === "review"
+                    ? "Back to Review Queue"
+                    : source === "library"
+                    ? "Back to Library"
+                    : "Go Back"}
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* Header Dashboard Banner */}
           <div className="p-6 rounded-2xl bg-gradient-to-r from-[#0d1424] to-[#080d19] border border-slate-900 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -614,7 +577,13 @@ function PracticePageContent() {
               className="flex items-center gap-1.5 text-xs font-bold text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4.5 h-4.5" />
-              <span>Back to Practice Setup</span>
+              <span>
+                {source === "review"
+                  ? "Back to Review Queue"
+                  : source === "library"
+                  ? "Back to Library"
+                  : "Back to Practice Setup"}
+              </span>
             </button>
             
             {!singleId && !sessionFinished && (
@@ -685,7 +654,11 @@ function PracticePageContent() {
                   onClick={handleRestart}
                   className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition-all cursor-pointer"
                 >
-                  Configure New Session
+                  {source === "review"
+                    ? "Back to Review Queue"
+                    : source === "library"
+                    ? "Back to Library"
+                    : "Configure New Session"}
                 </button>
                 {!singleId && (
                   <button
@@ -714,7 +687,11 @@ function PracticePageContent() {
                 onClick={handleRestart}
                 className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition-all cursor-pointer"
               >
-                Go Back to Setup
+                {source === "review"
+                  ? "Back to Review Queue"
+                  : source === "library"
+                  ? "Back to Library"
+                  : "Go Back to Setup"}
               </button>
             </div>
           ) : (
@@ -746,7 +723,7 @@ function PracticePageContent() {
                 onClick={() => setShowMeaning(!showMeaning)}
                 className={`relative w-full min-h-[380px] rounded-3xl glass-panel border border-slate-900 flex flex-col justify-between p-6 lg:p-8 text-center cursor-pointer transition-all duration-300 select-none ${
                   showMeaning
-                    ? "bg-gradient-to-b from-[#0b1220]/80 to-[#050812]/90 border-slate-850"
+                    ? "bg-gradient-to-b from-[#0b1220] to-[#060a14] border-slate-800"
                     : "hover:scale-[1.002] hover:border-cyan-500/20 bg-slate-950/20"
                 }`}
               >
@@ -762,14 +739,15 @@ function PracticePageContent() {
                     </span>
                     <button
                       type="button"
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        await deleteWord(activeCard);
-                        setPracticeQueue(prev => prev.filter(w => w.id !== activeCard.id));
-                        setAllCatalog(prev => prev.filter(w => w.id !== activeCard.id));
-                        if (practiceIndex >= practiceQueue.length - 1) {
-                          setSessionFinished(true);
-                        }
+                        triggerDelete(activeCard, () => {
+                          setPracticeQueue(prev => prev.filter(w => w.id !== activeCard.id));
+                          setAllCatalog(prev => prev.filter(w => w.id !== activeCard.id));
+                          if (practiceIndex >= practiceQueue.length - 1) {
+                            setSessionFinished(true);
+                          }
+                        });
                       }}
                       className="p-1.5 rounded-lg text-slate-500 hover:text-rose-455 hover:bg-slate-900/60 transition-all cursor-pointer"
                       title="Delete Card"
@@ -784,14 +762,14 @@ function PracticePageContent() {
                   {!showMeaning ? (
                     /* Front State (Unflipped) */
                     <div className="space-y-4 flex flex-col items-center">
-                      <h3 className="text-3.5xl lg:text-4.5xl font-black text-slate-100 tracking-tight glow-cyan max-w-[500px] break-words leading-none mb-1">
+                      <h3 className={`${getPracticeWordSizeClass(wordFontSize)} font-extrabold text-white tracking-normal font-sans max-w-full break-words text-center drop-shadow-md mb-2 px-4 leading-normal`}>
                         {activeCard.word}
                       </h3>
                       
                       {/* Audio controls */}
                       <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
                         {/* US Accent */}
-                        <div className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                        <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
                           <span className="text-[9px] font-black text-slate-505 uppercase">US</span>
                           {activeCard.type !== "native_daily_phrase" && (
                             <span className="text-[12px] font-semibold text-slate-400">
@@ -811,7 +789,7 @@ function PracticePageContent() {
                         </div>
 
                         {/* UK Accent */}
-                        <div className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                        <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
                           <span className="text-[9px] font-black text-slate-505 uppercase">UK</span>
                           {activeCard.type !== "native_daily_phrase" && (
                             <span className="text-[12px] font-semibold text-slate-400">
@@ -840,12 +818,12 @@ function PracticePageContent() {
                     <div className="w-full space-y-6 max-w-4xl mx-auto animate-scale-up text-center">
                       {/* Top Centered Section: Word & Audio */}
                       <div className="space-y-3">
-                        <h3 className="text-3xl lg:text-4xl font-black text-slate-100 tracking-tight break-words">
+                        <h3 className={`${getPracticeWordSizeClass(wordFontSize)} font-extrabold text-cyan-400 tracking-normal font-sans max-w-full break-words text-center drop-shadow-md px-4 leading-normal`}>
                           {activeCard.word}
                         </h3>
                         
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                          <div className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                          <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
                             <span className="text-[9px] font-black text-slate-500 uppercase">US</span>
                             {activeCard.type !== "native_daily_phrase" && (
                               <span className="text-[12px] font-semibold text-slate-400">
@@ -863,7 +841,7 @@ function PracticePageContent() {
                             </button>
                           </div>
 
-                          <div className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
+                          <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-800">
                             <span className="text-[9px] font-black text-slate-500 uppercase">UK</span>
                             {activeCard.type !== "native_daily_phrase" && (
                               <span className="text-[12px] font-semibold text-slate-400">
@@ -893,7 +871,7 @@ function PracticePageContent() {
                           {/* English Meaning */}
                           <div className="space-y-1">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">English Meaning</span>
-                            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-900/80 leading-relaxed text-[13.5px] font-medium text-slate-200">
+                            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 leading-relaxed text-[14px] font-semibold text-slate-100">
                               {activeCard.meaning}
                             </div>
                           </div>
@@ -901,7 +879,7 @@ function PracticePageContent() {
                           {/* Vietnamese Translation */}
                           <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 space-y-1 shadow-sm">
                             <span className="text-[10px] font-black text-emerald-550 uppercase tracking-wider block">Vietnamese Meaning</span>
-                            <p className="text-[15px] font-black text-emerald-400">
+                            <p className="text-[16px] font-black text-emerald-400">
                               {activeCard.vietnamese}
                             </p>
                           </div>
@@ -913,7 +891,7 @@ function PracticePageContent() {
                           {activeCard.example && (
                             <div className="space-y-1">
                               <span className="text-[10px] font-black text-slate-505 uppercase tracking-widest block">Usage Example</span>
-                              <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-900 border-l-2 border-l-cyan-500/40 text-[13px] text-slate-350 italic leading-relaxed">
+                              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 border-l-2 border-l-cyan-500/40 text-[13.5px] text-slate-200 italic leading-relaxed font-medium">
                                 &ldquo;{activeCard.example}&rdquo;
                               </div>
                             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import {
   collection,
@@ -10,10 +10,7 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
-  limit,
-  getCountFromServer,
-  writeBatch
+  getCountFromServer
 } from "firebase/firestore";
 
 export interface VocabItem {
@@ -68,12 +65,20 @@ interface VocabContextType {
   selectedWord: VocabItem | null;
   setSelectedWord: (word: VocabItem | null) => void;
 
+  // Custom Delete Confirm Dialog
+  isDeleteConfirmOpen: boolean;
+  setIsDeleteConfirmOpen: (open: boolean) => void;
+  deleteTargetItem: VocabItem | null;
+  triggerDelete: (item: VocabItem, onSuccess?: () => void) => void;
+  onDeleteSuccess: (() => void) | null;
+
   // DB Actions
   createWord: (formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string, formCommonPhrases?: string) => Promise<void>;
   updateWord: (item: VocabItem, formWord: string, formType: VocabItem["type"], formMeaning: string, formVietnamese: string, formExample: string, formDifficulty: VocabItem["difficulty"], formWordTypes: string[], formPronunciationUS: string, formPronunciationUK: string, formCommonPhrases?: string) => Promise<void>;
   deleteWord: (item: VocabItem) => Promise<void>;
   toggleBookmark: (item: VocabItem) => Promise<void>;
   updatePracticeProgress: (item: VocabItem, known: boolean) => Promise<void>;
+  checkDuplicate: (word: string) => Promise<VocabItem | null>;
 
   // Real-time Counts for sidebar and library filters
   counts: { all: number; word: number; phrase: number; idiom: number; native_daily_phrase: number };
@@ -82,6 +87,10 @@ interface VocabContextType {
   // Real-time review queue
   reviewWords: VocabItem[];
   refreshReviewWords: () => Promise<void>;
+
+  // Sync / reactive updates trigger
+  lastUpdated: number;
+  triggerUpdate: () => void;
 }
 
 const VocabContext = createContext<VocabContextType | undefined>(undefined);
@@ -90,6 +99,10 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
   const [words, setWords] = useState<VocabItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
+
+  // Sync / reactive state
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
+  const triggerUpdate = () => setLastUpdated(Date.now());
 
   // Settings states
   const [userName, setUserNameState] = useState("Cody");
@@ -105,15 +118,29 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedWord, setSelectedWord] = useState<VocabItem | null>(null);
 
+  // Custom Delete Confirm Dialog States
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deleteTargetItem, setDeleteTargetItem] = useState<VocabItem | null>(null);
+  const [onDeleteSuccess, setOnDeleteSuccess] = useState<(() => void) | null>(null);
+
+  const triggerDelete = (item: VocabItem, onSuccess?: () => void) => {
+    setDeleteTargetItem(item);
+    setOnDeleteSuccess(() => onSuccess || null);
+    setIsDeleteConfirmOpen(true);
+  };
+
   // Counts state
   const [counts, setCounts] = useState({ all: 0, word: 0, phrase: 0, idiom: 0, native_daily_phrase: 0 });
   
   // Review stack state
   const [reviewWords, setReviewWords] = useState<VocabItem[]>([]);
 
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const showToast = (message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, visible: true });
-    setTimeout(() => setToast({ message: "", visible: false }), 3000);
+    toastTimerRef.current = setTimeout(() => setToast({ message: "", visible: false }), 3000);
   };
 
   // Load username, streak, goals, and font preference
@@ -238,7 +265,7 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
           );
           const snap = await getDocs(q);
           snap.forEach((d) => {
-            reviewList.push({ id: d.id, ...d.data() } as VocabItem);
+            reviewList.push({ id: d.id, ...d.data(), type } as VocabItem);
           });
         })
       );
@@ -254,10 +281,14 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Run counts + review in parallel to avoid waterfall
+  const refreshAll = async () => {
+    await Promise.all([refreshCounts(), refreshReviewWords()]);
+  };
+
   // Initial Sync
   useEffect(() => {
-    refreshCounts();
-    refreshReviewWords();
+    refreshAll();
   }, []);
 
   // Actions
@@ -308,20 +339,50 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("lexivault_words", JSON.stringify(updated));
       setWords(updated);
       showToast(`"${formWord}" added successfully (local)!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
       return;
     }
 
     try {
       await setDoc(doc(db!, "vocabulary", formType, "items", newId), newItem);
       showToast(`"${formWord}" added successfully!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
     } catch (err) {
       console.error("Firestore create error:", err);
       showToast("Failed to write to database.");
     }
+  };
+
+  const checkDuplicate = async (word: string): Promise<VocabItem | null> => {
+    const normalized = word.trim().toLowerCase();
+    if (!normalized) return null;
+
+    if (!db) {
+      const saved = localStorage.getItem("lexivault_words");
+      if (!saved) return null;
+      try {
+        const all: VocabItem[] = JSON.parse(saved);
+        return all.find(w => w.word.trim().toLowerCase() === normalized) || null;
+      } catch { return null; }
+    }
+
+    try {
+      const types = ["word", "phrase", "idiom", "native_daily_phrase"] as const;
+      for (const t of types) {
+        const snap = await getDocs(collection(db!, "vocabulary", t, "items"));
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (((data.word as string) || "").trim().toLowerCase() === normalized) {
+            return { ...data, id: d.id, type: t } as VocabItem;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("checkDuplicate error:", err);
+    }
+    return null;
   };
 
   const updateWord = async (
@@ -381,8 +442,8 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("lexivault_words", JSON.stringify(updated));
       setWords(updated);
       showToast(`"${formWord}" updated successfully (local)!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
       return;
     }
 
@@ -393,8 +454,8 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       }
       await setDoc(doc(db!, "vocabulary", formType, "items", item.id), updatedItem);
       showToast(`"${formWord}" updated successfully!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
     } catch (err) {
       console.error("Firestore update error:", err);
       showToast("Failed to update database.");
@@ -402,8 +463,6 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteWord = async (item: VocabItem) => {
-    if (!confirm(`Are you sure you want to delete "${item.word}"?`)) return;
-
     if (!db) {
       const saved = localStorage.getItem("lexivault_words");
       const currentList: VocabItem[] = saved ? JSON.parse(saved) : [];
@@ -411,16 +470,16 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("lexivault_words", JSON.stringify(updated));
       setWords(updated);
       showToast(`"${item.word}" deleted successfully (local)!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
       return;
     }
 
     try {
       await deleteDoc(doc(db!, "vocabulary", item.type, "items", item.id));
       showToast(`"${item.word}" deleted successfully!`);
-      refreshCounts();
-      refreshReviewWords();
+      refreshAll();
+      triggerUpdate();
     } catch (err) {
       console.error("Firestore delete error:", err);
       showToast("Failed to delete card.");
@@ -438,6 +497,7 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       setWords(updated);
       showToast(item.bookmarked ? "Removed bookmark" : "Bookmarked!");
       refreshReviewWords();
+      triggerUpdate();
       return;
     }
 
@@ -445,6 +505,7 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
       await setDoc(doc(db!, "vocabulary", item.type, "items", item.id), updatedItem);
       showToast(item.bookmarked ? "Removed bookmark" : "Bookmarked!");
       refreshReviewWords();
+      triggerUpdate();
     } catch (err) {
       console.error("Firestore bookmark error:", err);
     }
@@ -501,6 +562,7 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
     }
 
     refreshReviewWords();
+    triggerUpdate();
   };
 
   return (
@@ -529,15 +591,23 @@ export function VocabProvider({ children }: { children: React.ReactNode }) {
         setIsEditModalOpen,
         selectedWord,
         setSelectedWord,
+        isDeleteConfirmOpen,
+        setIsDeleteConfirmOpen,
+        deleteTargetItem,
+        triggerDelete,
+        onDeleteSuccess,
         createWord,
         updateWord,
         deleteWord,
         toggleBookmark,
         updatePracticeProgress,
+        checkDuplicate,
         counts,
         refreshCounts,
         reviewWords,
-        refreshReviewWords
+        refreshReviewWords,
+        lastUpdated,
+        triggerUpdate
       }}
     >
       {children}

@@ -83,3 +83,47 @@ body {
     opacity: .7;
   }
 }
+
+/* Liquid Card Styling */
+.liquid-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(22, 31, 48, 0.45) 0%, rgba(10, 16, 28, 0.65) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.liquid-card::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.06) 0%, rgba(139, 92, 246, 0.04) 40%, transparent 70%);
+  transform: translate(0, 0) rotate(0deg);
+  transition: all 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.liquid-card:hover {
+  transform: translateY(-4px) scale(1.008);
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 
+    0 12px 40px -10px rgba(6, 182, 212, 0.25),
+    0 0 20px 0 rgba(6, 182, 212, 0.12) inset;
+}
+
+.liquid-card:hover::before {
+  transform: translate(10%, 10%) rotate(180deg);
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, rgba(139, 92, 246, 0.08) 40%, transparent 70%);
+}
+
+.liquid-card > * {
+  position: relative;
+  z-index: 1;
+}

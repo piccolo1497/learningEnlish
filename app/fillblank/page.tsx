@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from "react
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
+import { playPronunciation, shuffleArray } from "@/lib/helpers";
 import {
   ArrowLeft, Check, X, Lightbulb,
   SkipForward, RotateCcw, Trophy, BookOpen,
@@ -25,14 +26,7 @@ interface VocabItem {
 type Result = "correct" | "wrong" | null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+function shuffle<T>(arr: T[]): T[] { return shuffleArray(arr); }
 
 function letterBlank(word: string) {
   return word.split("").map((c, i) => (i === 0 || c === " " ? c.toUpperCase() : "·")).join("  ");
@@ -49,78 +43,6 @@ const DIFF_STYLE: Record<string, { dot: string; text: string }> = {
   easy:   { dot: "bg-emerald-400", text: "text-emerald-400" },
   medium: { dot: "bg-amber-400",   text: "text-amber-400"   },
   hard:   { dot: "bg-rose-400",    text: "text-rose-400"    },
-};
-
-const cleanWordForSpeech = (str: string): string => {
-  let cleaned = str;
-  // Remove starting "(to) " cleanly
-  cleaned = cleaned.replace(/^\s*\(to\)\s*/i, "");
-  // Remove any other text inside parentheses
-  cleaned = cleaned.replace(/\([^)]*\)/g, " ");
-  // If it contains a slash, take the first option
-  if (cleaned.includes("/")) {
-    cleaned = cleaned.split("/")[0];
-  }
-  // Trim and normalize multiple spaces
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
-};
-
-const playPronunciation = (word: string, accent: "US" | "UK") => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
-  // Cancel any ongoing speech
-  window.speechSynthesis.cancel();
-
-  const speak = () => {
-    const cleanWord = cleanWordForSpeech(word);
-    if (!cleanWord) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanWord);
-    utterance.lang = accent === "US" ? "en-US" : "en-GB";
-    utterance.rate = 0.95;
-
-    const voices = window.speechSynthesis.getVoices();
-    const targetLang = accent === "US" ? "en-us" : "en-gb";
-
-    // 1. Precise lang match (en-US or en-GB)
-    let voice = voices.find(v => {
-      const l = v.lang.toLowerCase().replace("_", "-");
-      return l === targetLang || l.startsWith(targetLang + "-");
-    });
-
-    // 2. Keyword fallback for US/UK names
-    if (!voice) {
-      voice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        const lang = v.lang.toLowerCase();
-        if (lang.startsWith("en")) {
-          if (accent === "US") {
-            return name.includes("us") || name.includes("united states") || name.includes("david") || name.includes("zira") || name.includes("samantha");
-          } else {
-            return name.includes("gb") || name.includes("uk") || name.includes("united kingdom") || name.includes("hazel") || name.includes("daniel");
-          }
-        }
-        return false;
-      });
-    }
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  } else {
-    speak();
-  }
 };
 
 
@@ -140,7 +62,7 @@ function FillBlankContent() {
   const [score, setScore]           = useState({ correct: 0, wrong: 0 });
   const [streak, setStreak]         = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
-  const [showViHint, setShowViHint] = useState(false);
+  const [showViHint, setShowViHint] = useState(true);
   const [showLetterHint, setShowLetterHint] = useState(false);
   const [finished, setFinished]     = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,32 +113,33 @@ function FillBlankContent() {
     }
 
     const types = ["word", "phrase", "idiom", "native_daily_phrase"] as const;
-    const loaded: Record<string, VocabItem[]> = {};
-    const seen = new Set<string>();
-    const unsubs = types.map((t) =>
-      onSnapshot(
-        collection(db!, "vocabulary", t, "items"), 
-        (snap) => {
-          loaded[t] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VocabItem));
-          seen.add(t);
-          if (seen.size === types.length) {
-            setAllWords(Object.values(loaded).flat());
-            setLoading(false);
-          }
-        },
-        (error) => {
-          console.error(`Firestore loading error in fillblank for ${t}:`, error);
-          const saved = localStorage.getItem("lexivault_words");
-          if (saved) {
-            try {
-              setAllWords(JSON.parse(saved));
-            } catch (e) {}
-          }
-          setLoading(false);
+    
+    const fetchAll = async () => {
+      try {
+        const fetched: VocabItem[] = [];
+        await Promise.all(
+          types.map(async (t) => {
+            const snap = await getDocs(collection(db!, "vocabulary", t, "items"));
+            snap.docs.forEach((d) => {
+              fetched.push({ id: d.id, ...d.data() } as VocabItem);
+            });
+          })
+        );
+        setAllWords(fetched);
+      } catch (error) {
+        console.error("Firestore loading error in fillblank:", error);
+        const saved = localStorage.getItem("lexivault_words");
+        if (saved) {
+          try {
+            setAllWords(JSON.parse(saved));
+          } catch (e) {}
         }
-      )
-    );
-    return () => unsubs.forEach((u) => u());
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAll();
   }, []);
 
   const startGame = useCallback((words: VocabItem[]) => {
@@ -224,7 +147,7 @@ function FillBlankContent() {
     setQueue(shuffle(words));
     setIndex(0); setInput(""); setResult(null); setAnswerRevealed(false);
     setScore({ correct: 0, wrong: 0 }); setStreak(0);
-    setShowViHint(false); setShowLetterHint(false); setFinished(false);
+    setShowViHint(true); setShowLetterHint(false); setFinished(false);
   }, []);
 
   // If navigated from library with custom selection, use those items
@@ -249,6 +172,20 @@ function FillBlankContent() {
 
   useEffect(() => { if (!loading && allWords.length) startGame(allWords); }, [loading, allWords, startGame]);
   useEffect(() => { if (result === null) inputRef.current?.focus(); }, [index, result]);
+
+  // Listen for Enter key to advance to next card when answer is checked
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && result !== null && !finished) {
+        e.preventDefault();
+        handleNext();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [result, finished, index, queue.length]);
 
   const current = queue[index];
   const total   = score.correct + score.wrong;
@@ -278,7 +215,7 @@ function FillBlankContent() {
 
   const handleNext = () => {
     setInput(""); setResult(null); setAnswerRevealed(false);
-    setShowViHint(false); setShowLetterHint(false);
+    setShowViHint(true); setShowLetterHint(false);
     if (index + 1 >= queue.length) setFinished(true);
     else setIndex((i) => i + 1);
   };
@@ -406,28 +343,28 @@ function FillBlankContent() {
         {/* Hints Panel: Vietnamese & Letter Hints side-by-side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           {/* Vietnamese hint */}
-          <div className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5">
-            <button
-              onClick={() => setShowViHint((v) => !v)}
-              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
-            >
+          <div
+            onClick={() => setShowViHint((v) => !v)}
+            className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5 cursor-pointer hover:bg-slate-900/40 hover:border-slate-800 transition-all select-none"
+          >
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-amber-400 transition-colors">
               <Eye className="w-3.5 h-3.5" />
               {showViHint ? "Hide" : "Show"} Vietnamese Hint
-            </button>
+            </div>
             {showViHint && (
               <p className="text-base font-extrabold text-amber-400 transition-all animate-fade-in">{current.vietnamese}</p>
             )}
           </div>
 
           {/* Letter hint */}
-          <div className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5">
-            <button
-              onClick={() => setShowLetterHint((v) => !v)}
-              className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-cyan-400 transition-colors cursor-pointer"
-            >
+          <div
+            onClick={() => setShowLetterHint((v) => !v)}
+            className="p-4 rounded-2xl bg-slate-950/30 border border-slate-900 space-y-2.5 cursor-pointer hover:bg-slate-900/40 hover:border-slate-800 transition-all select-none"
+          >
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-cyan-400 transition-colors">
               <Lightbulb className="w-3.5 h-3.5" />
               {showLetterHint ? "Hide" : "Show"} Letter Hint
-            </button>
+            </div>
             {showLetterHint && (
               <p className="font-mono text-base font-bold text-cyan-400 tracking-[0.25em] leading-relaxed transition-all animate-fade-in">{letterBlank(current.word)}</p>
             )}

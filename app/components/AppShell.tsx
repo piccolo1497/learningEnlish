@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useVocab } from "@/app/context/VocabContext";
+import { getTypeLabel, playPronunciation } from "@/lib/helpers";
 import {
   LayoutDashboard,
   Library,
@@ -26,70 +27,6 @@ import {
   PenLine
 } from "lucide-react";
 
-const cleanWordForSpeech = (str: string): string => {
-  let cleaned = str;
-  cleaned = cleaned.replace(/^\s*\(to\)\s*/i, "");
-  cleaned = cleaned.replace(/\([^)]*\)/g, " ");
-  if (cleaned.includes("/")) {
-    cleaned = cleaned.split("/")[0];
-  }
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
-};
-
-const playPronunciation = (word: string, accent: "US" | "UK") => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-
-  const speak = () => {
-    const cleanWord = cleanWordForSpeech(word);
-    if (!cleanWord) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanWord);
-    utterance.lang = accent === "US" ? "en-US" : "en-GB";
-    utterance.rate = 0.95;
-
-    const voices = window.speechSynthesis.getVoices();
-    const targetLang = accent === "US" ? "en-us" : "en-gb";
-
-    let voice = voices.find(v => {
-      const l = v.lang.toLowerCase().replace("_", "-");
-      return l === targetLang || l.startsWith(targetLang + "-");
-    });
-
-    if (!voice) {
-      voice = voices.find(v => {
-        const name = v.name.toLowerCase();
-        const lang = v.lang.toLowerCase();
-        if (lang.startsWith("en")) {
-          if (accent === "US") {
-            return name.includes("us") || name.includes("united states") || name.includes("david") || name.includes("zira") || name.includes("samantha");
-          } else {
-            return name.includes("gb") || name.includes("uk") || name.includes("united kingdom") || name.includes("hazel") || name.includes("daniel");
-          }
-        }
-        return false;
-      });
-    }
-
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      speak();
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  } else {
-    speak();
-  }
-};
-
 const WORD_TYPES_LIST = [
   { value: "", label: "None" },
   { value: "noun", label: "Noun" },
@@ -100,21 +37,6 @@ const WORD_TYPES_LIST = [
   { value: "prep", label: "Prep" },
   { value: "conj", label: "Conj" }
 ];
-
-const getTypeLabel = (type: string) => {
-  switch (type) {
-    case "word":
-      return "Word";
-    case "phrase":
-      return "Phrase";
-    case "idiom":
-      return "Idiom";
-    case "native_daily_phrase":
-      return "Native Speaker";
-    default:
-      return type;
-  }
-};
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -133,24 +55,57 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setIsEditModalOpen,
     selectedWord,
     setSelectedWord,
+    isDeleteConfirmOpen,
+    setIsDeleteConfirmOpen,
+    deleteTargetItem,
+    triggerDelete,
+    onDeleteSuccess,
     createWord,
     updateWord,
-    deleteWord
+    deleteWord,
+    checkDuplicate
   } = useVocab();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState("");
 
-  // Sync route query search if on library page
+  // Sync route query search if on library page (handles mount, pathname change, and popstate navigation)
   useEffect(() => {
-    if (pathname === "/library") {
-      const currentQuery = new URLSearchParams(window.location.search);
-      const search = currentQuery.get("search") || "";
-      setLocalSearch(search);
-    } else {
-      setLocalSearch("");
-    }
+    const syncWithUrl = () => {
+      if (pathname === "/library") {
+        const currentQuery = new URLSearchParams(window.location.search);
+        const search = currentQuery.get("search") || "";
+        setLocalSearch(search);
+      } else {
+        setLocalSearch("");
+      }
+    };
+
+    syncWithUrl();
+
+    window.addEventListener("popstate", syncWithUrl);
+    return () => window.removeEventListener("popstate", syncWithUrl);
   }, [pathname]);
+
+  // Automatically update the URL query parameter with a 300ms debounce as the user types
+  useEffect(() => {
+    const currentQuery = new URLSearchParams(window.location.search);
+    const urlSearch = currentQuery.get("search") || "";
+
+    if (localSearch === urlSearch) return;
+
+    const delayDebounceFn = setTimeout(() => {
+      if (localSearch.trim()) {
+        router.push(`/library?search=${encodeURIComponent(localSearch)}`);
+      } else {
+        if (pathname === "/library") {
+          router.push("/library");
+        }
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [localSearch, pathname, router]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,6 +128,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Pre-submit confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [confirmData, setConfirmData] = useState<{ label: string; value: string }[]>([]);
+
+  // Duplicate-word warning modal
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [duplicateFoundItem, setDuplicateFoundItem] = useState<import("@/app/context/VocabContext").VocabItem | null>(null);
+  const [pendingCreateAfterDupe, setPendingCreateAfterDupe] = useState(false);
 
   // Auto-detect Word Type and Pronunciation
   useEffect(() => {
@@ -288,6 +248,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Check for duplicate before anything else
+    if (!pendingCreateAfterDupe) {
+      const dupe = await checkDuplicate(formWord);
+      if (dupe) {
+        setDuplicateFoundItem(dupe);
+        setIsDuplicateModalOpen(true);
+        return;
+      }
+    }
+    setPendingCreateAfterDupe(false);
+
     if (spellingWarning) {
       const summary = [
         { label: "Word / Phrase", value: formWord },
@@ -330,7 +301,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex min-h-screen bg-[#080d16] text-slate-100 antialiased selection:bg-cyan-500/30">
+    <div className="flex h-screen overflow-hidden bg-[#080d16] text-slate-100 antialiased selection:bg-cyan-500/30">
       
       {/* ── SUCCESS TOAST ─────────────────────────────────── */}
       {toast.visible && (
@@ -362,7 +333,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
@@ -370,22 +341,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs transition-all duration-200 cursor-pointer ${
                   isActive
-                    ? "bg-cyan-500/10 text-cyan-400 border-l-2 border-cyan-400 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                    ? "bg-gradient-to-r from-cyan-500/15 to-cyan-500/5 text-cyan-350 border-l-[3px] border-cyan-400 shadow-md shadow-cyan-500/5 font-extrabold pl-4"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 hover:pl-4.5 font-medium"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-cyan-400" : "text-slate-400"}`} />
+                <Icon className={`w-4 h-4 transition-transform duration-200 ${isActive ? "text-cyan-400 scale-105" : "text-slate-400 group-hover:scale-105"}`} />
                 <span>{item.label}</span>
                 
                 {/* Total words counts next to Library */}
                 {item.id === "library" && counts.all > 0 && (
-                  <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-slate-400 rounded-md border border-slate-800">
+                  <span className={`ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded-md border ${isActive ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30" : "bg-slate-900 text-slate-400 border-slate-800"}`}>
                     {counts.all}
                   </span>
                 )}
-
+ 
                 {/* Review count badge */}
                 {item.id === "review" && reviewWords.length > 0 && (
                   <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-cyan-500 text-[#080d16] rounded-full animate-pulse-slow">
@@ -442,7 +413,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
@@ -451,21 +422,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.id}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs transition-all duration-200 cursor-pointer ${
                   isActive
-                    ? "bg-cyan-500/10 text-cyan-400 border-l-2 border-cyan-400"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                    ? "bg-gradient-to-r from-cyan-500/15 to-cyan-500/5 text-cyan-350 border-l-[3px] border-cyan-400 shadow-md shadow-cyan-500/5 font-extrabold pl-4"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 hover:pl-4.5 font-medium"
                 }`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className={`w-4 h-4 transition-transform duration-200 ${isActive ? "text-cyan-400 scale-105" : "text-slate-400"}`} />
                 <span>{item.label}</span>
                 {item.id === "library" && counts.all > 0 && (
-                  <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-slate-400 rounded-md">
+                  <span className={`ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded-md border ${isActive ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30" : "bg-slate-900 text-slate-400 border-slate-800"}`}>
                     {counts.all}
                   </span>
                 )}
                 {item.id === "review" && reviewWords.length > 0 && (
-                  <span className="ml-auto px-1.5 py-0.5 text-[12px] font-bold bg-cyan-500 text-[#080d16] rounded-full">
+                  <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-cyan-500 text-[#080d16] rounded-full animate-pulse-slow">
                     {reviewWords.length}
                   </span>
                 )}
@@ -1011,9 +982,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => {
                     if (selectedWord) {
-                      deleteWord(selectedWord);
-                      setIsEditModalOpen(false);
-                      setSelectedWord(null);
+                      triggerDelete(selectedWord, () => {
+                        setIsEditModalOpen(false);
+                        setSelectedWord(null);
+                      });
                     }
                   }}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all cursor-pointer flex items-center gap-1.5"
@@ -1100,6 +1072,120 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-slate-950 shadow hover:shadow-cyan/25 active:scale-95 transition-all cursor-pointer"
               >
                 Accept & Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          DUPLICATE WORD WARNING MODAL
+          ======================================================== */}
+      {isDuplicateModalOpen && duplicateFoundItem && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-md glass-panel rounded-2xl border border-amber-500/30 p-6 space-y-5 shadow-2xl bg-[#0a0f1d] animate-scale-up">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center shrink-0">
+                <Info className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-100">Duplicate Word Detected</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">This word already exists in your library.</p>
+              </div>
+            </div>
+
+            {/* Existing entry preview */}
+            <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-4 space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-400/70">Existing Entry</p>
+              <p className="text-lg font-black text-slate-100">{duplicateFoundItem.word}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  {getTypeLabel(duplicateFoundItem.type)}
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                  {duplicateFoundItem.difficulty}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{duplicateFoundItem.meaning}</p>
+              <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="text-[9px] px-1 rounded bg-emerald-500/10 border border-emerald-500/10 font-bold">VN</span>
+                {duplicateFoundItem.vietnamese}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDuplicateModalOpen(false);
+                  setDuplicateFoundItem(null);
+                }}
+                className="flex-1 py-2.5 text-xs font-bold text-slate-300 hover:text-slate-100 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 rounded-xl transition-all cursor-pointer"
+              >
+                Go Back & Edit
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsDuplicateModalOpen(false);
+                  setDuplicateFoundItem(null);
+                  setPendingCreateAfterDupe(true);
+                  // Trigger the submit flow again, this time skipping dupe check
+                  await createWord(formWord, formType, formMeaning, formVietnamese, formExample, formDifficulty, formWordTypes, formPronunciationUS, formPronunciationUK, formCommonPhrases);
+                  setPendingCreateAfterDupe(false);
+                  resetAddForm();
+                }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 active:scale-95 transition-all cursor-pointer shadow-md shadow-amber-500/10"
+              >
+                Save Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          DELETE CONFIRMATION MODAL
+          ======================================================== */}
+      {isDeleteConfirmOpen && deleteTargetItem && (
+        <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-sm glass-panel rounded-2xl border border-rose-500/20 p-6 space-y-6 shadow-2xl bg-[#080d16] animate-scale-up text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-400 border border-rose-500/20">
+              <Trash2 className="w-6 h-6 animate-pulse" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-slate-100">Delete Vocabulary Card?</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Are you sure you want to delete <span className="text-slate-200 font-bold">"{deleteTargetItem.word}"</span>? This action is permanent and cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteConfirmOpen(false);
+                }}
+                className="flex-1 py-3 text-xs font-bold text-slate-400 hover:text-slate-200 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 rounded-xl transition-all cursor-pointer"
+              >
+                No, Keep It
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = deleteTargetItem;
+                  setIsDeleteConfirmOpen(false);
+                  await deleteWord(target);
+                  if (onDeleteSuccess) {
+                    onDeleteSuccess();
+                  }
+                }}
+                className="flex-1 py-3 rounded-xl text-xs font-extrabold bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white shadow-lg shadow-rose-500/10 active:scale-95 transition-all cursor-pointer"
+              >
+                Yes, Delete Card
               </button>
             </div>
           </div>

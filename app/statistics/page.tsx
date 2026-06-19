@@ -21,7 +21,8 @@ export default function StatisticsPage() {
     accuracyHistory, 
     streak, 
     dailyProgress, 
-    dailyGoal 
+    dailyGoal,
+    lastUpdated
   } = useVocab();
 
   const [wordsList, setWordsList] = useState<VocabItem[]>([]);
@@ -57,7 +58,7 @@ export default function StatisticsPage() {
             types.map(async (t) => {
               const snap = await getDocs(collection(db!, "vocabulary", t, "items"));
               snap.forEach((d) => {
-                allItems.push({ id: d.id, ...d.data() } as VocabItem);
+                allItems.push({ id: d.id, ...d.data(), type: t } as VocabItem);
               });
             })
           );
@@ -85,7 +86,7 @@ export default function StatisticsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [lastUpdated]);
 
   // Compute accuracy ratio safely
   const accuracyPercent = useMemo(() => {
@@ -103,8 +104,7 @@ export default function StatisticsPage() {
     const today = new Date();
     const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
     const diffToMonday = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diffToMonday));
-    monday.setHours(0, 0, 0, 0);
+    const monday = new Date(today.getFullYear(), today.getMonth(), diffToMonday, 0, 0, 0, 0);
 
     let hasData = false;
     wordsList.forEach(w => {
