@@ -1,55 +1,28 @@
-# LexiVault Architecture & Feature Documentation
+# LexiVault Master Architecture & Technical Specification
 
-Welcome to **LexiVault**, a modern, state-of-the-art vocabulary building and language learning application. This documentation outlines the codebase architecture, file structures, state management, key features, and visual components.
-
----
-
-## Table of Contents
-1. [Tech Stack & System Architecture](#1-tech-stack-sys-architecture)
-2. [Directory Structure](#2-directory-structure)
-3. [Global State & Database Synchronization](#3-global-state--database-sync)
-4. [Core Features & Pages](#4-core-features--pages)
-   - [Dashboard (Home)](#dashboard-home)
-   - [Library Words](#library-words)
-   - [Practice Arena](#practice-arena)
-   - [Review Queue (SM-2 Spaced Repetition)](#review-queue-sm-2-spaced-repetition)
-   - [Fill in the Blank Game](#fill-in-the-blank-game)
-   - [Statistics Arena](#statistics-arena)
-   - [Settings Dashboard](#settings-dashboard)
-5. [UX/UI & Responsive Sizing Guidelines](#5-uxui--responsive-sizing-guidelines)
+This document serves as the **single source of truth** for the LexiVault codebase. It details all technical architectures, critical algorithms, database schemas, and state management mechanisms to allow any developer or AI coding agent to instantly understand the entire web application and its features.
 
 ---
 
-<a name="1-tech-stack-sys-architecture"></a>
-## 1. Tech Stack & System Architecture
+## 1. System Overview & Technology Stack
 
-LexiVault is designed with performance, premium aesthetics, and responsive accessibility in mind.
-- **Framework**: Next.js 16 (using App Router) with Turbopack compilation.
-- **Styling**: Tailwind CSS & vanilla CSS. Implements a unified dark space aesthetic theme (gradients, glassmorphism backdrop filters, clean border lines, and subtle micro-animations).
-- **Backend & Database**: Firebase Firestore for real-time cloud data synchronization, with local offline fallback using `localStorage`.
-- **State Management**: React Context API (`VocabContext`) to share vocabulary database state globally across the application.
-- **Spaced Repetition**: SuperMemo SM-2 algorithm to schedule card reviews based on user response accuracy.
-
-```mermaid
-graph TD
-    A[Next.js App Router UI] --> B[VocabContext React Context]
-    B --> C[Firebase Firestore Cloud Sync]
-    B --> D[localStorage Local Offline Fallback]
-    E[SuperMemo SM-2 Algorithm] --> B
-```
+LexiVault is a premium vocabulary learning application designed with dark space aesthetics, high-performance page transitions, and offline support.
+* **Core Framework**: Next.js 16 (App Router)
+* **Build tool**: Turbopack compiler (`next dev --turbopack`)
+* **Styling**: Tailwind CSS & Vanilla CSS (Dark Space Theme)
+* **Cloud Database**: Firebase Firestore
+* **Local Caching**: HTML5 Web Storage (`localStorage` and `sessionStorage`)
+* **Audio Engine**: Web Speech Synthesis API (US / UK phonetic voices)
 
 ---
 
-<a name="2-directory-structure"></a>
-## 2. Directory Structure
-
-Here is a summary of the key files and directories:
+## 2. Directory Structure & Key Files
 
 ```
 enlish/
 ├── app/
 │   ├── components/
-│   │   └── AppShell.tsx         # Sidebar, Global Navigation, Search, Add/Edit Word Modal
+│   │   └── AppShell.tsx         # Sidebar, Global Navigation, Global Search, Add/Edit Word Modal
 │   ├── context/
 │   │   └── VocabContext.tsx     # Global React Context, SM-2 Engine, Firebase Sync Logic
 │   ├── fillblank/
@@ -70,65 +43,175 @@ enlish/
 ├── lib/
 │   ├── firebase.ts              # Firebase initialization and credentials loader
 │   └── helpers.ts               # Sound play functions, string formatting, and date helpers
-├── next.config.ts               # Next.js configurations
-├── tailwind.config.ts           # Typography, custom layout sizes, and dark colors
-└── tsconfig.json                # TypeScript environment compiler configs
 ```
 
 ---
 
-<a name="3-global-state--database-sync"></a>
-## 3. Global State & Database Synchronization
+## 3. Database Schema & Data Models
 
-### `VocabContext.tsx`
-`VocabContext` is the heart of LexiVault. It performs several key roles:
-1. **Cloud & Local Storage Merging**: Fetches vocabulary documents from Firestore under the collections `/vocabulary/[type]/items`. If Firestore fails or is offline, it falls back immediately to loading data cached in local storage, preventing blank pages.
-2. **Duplication Guard**: When adding a new vocabulary item, the system checks whether the word exists in the current library. If it exists, a custom modal warning pop-up is shown asking the user whether to cancel, merge, or overwrite the existing word.
-3. **Spaced Repetition Scheduler (SM-2)**: Calculates review intervals (`interval`), repetition counts (`reps`), and easiness factors (`efactor`) using the SuperMemo SM-2 formula:
-   - Correct recall (`known = true`): Increases reps and increases or adjusts interval.
-   - Forgotten/wrong recall (`known = false`): Resets reps to 0 and resets interval to 1 day.
+### Firestore Collections & Subcollections
+Vocabulary items are split into collections based on their structural type:
+* `/vocabulary/word/items/[documentId]`
+* `/vocabulary/phrase/items/[documentId]`
+* `/vocabulary/idiom/items/[documentId]`
+* `/vocabulary/native_daily_phrase/items/[documentId]`
 
----
+### Vocabulary Document Fields (`VocabItem` Type)
+```typescript
+interface VocabItem {
+  id: string;                      // Document identifier (auto-generated by Firestore / local)
+  word: string;                    // The spelling of the vocabulary item
+  type: 'word' | 'phrase' | 'idiom' | 'native_daily_phrase';
+  meaning: string;                 // English meaning / definition
+  vietnamese: string;              // Vietnamese translation
+  example?: string;                // Example sentence
+  difficulty: 'easy' | 'medium' | 'hard';
+  streak: number;                  // Number of consecutive correct practices (default: 0)
+  nextReview: string;              // ISO Date String (YYYY-MM-DD) or "Today"
+  bookmarked: boolean;             // Favorite toggle flag
+  createdAt: string;               // ISO Timestamp string
+  wordTypes?: string[];            // e.g., ["noun", "verb", "adjective"] (applicable to 'word' only)
+  pronunciationUS?: string;        // IPA transcript for US accent
+  pronunciationUK?: string;        // IPA transcript for UK accent
+  commonPhrases?: string;          // Related common combinations
+}
+```
 
-<a name="4-core-features--pages"></a>
-## 4. Core Features & Pages
-
-### Dashboard (Home)
-- **Activity Summary**: Displays total cards count, streak count, due reviews count, and daily progress compared against the user's custom daily goals.
-- **Recent Activity Logs**: Renders a list of the latest added words with interactive tooltips and easy navigation.
-
-### Library Words
-- **Flexible Filters**: Batch query filter options by category (`Word`, `Phrase`, `Idiom`, `Native Daily Phrase`), difficulty (`Easy`, `Medium`, `Hard`), bookmarks, and query search string.
-- **Card Interactive Details**: Smooth card flip animations to inspect US/UK phonetic pronunciations, Vietnamese translation, and example sentences.
-- **Selection & Practice Mode**: Allows multi-selection of cards to trigger a targeted custom practice session instantly.
-
-### Practice Arena
-- **Flashcard Recalling**: Prompts cards with US/UK audio triggers. A click flips the card with a 3D transition animation to check details.
-- **Overlap-free Cycle Selection**: Tracks practiced words in `localStorage`. The system prioritizes unpracticed items. If the unpracticed list size is smaller than the requested limit, it selects the remaining items from the beginning of the list, resetting the cycle.
-- **Auto-wrap Formatting**: Ensures that long phrases or sentences wrap correctly (`break-words`) and are fully displayed on all devices without truncation.
-
-### Review Queue
-- **Schedule Overview**: Groups due items by calendar periods (Overdue, Due Today, Upcoming Tomorrow).
-- **Liquid-Bubble Wave Indicator**: A visual fluid wave animation representing the current load of the review queue relative to the daily goal.
-
-### Fill in the Blank Game
-- **Active Gameplay**: Hides characters in letters while showing the English meaning and Vietnamese translation (shown by default).
-- **Toggle hint box areas**: Clicking anywhere on the hint card blocks (rather than just small text links) toggles hint visibility.
-- **Keyboard-only Workflow**: Pressing `Enter` in the text box submits and checks your spelling. Pressing `Enter` once the answer has been checked automatically jumps to the next word immediately.
-
-### Statistics Arena
-- **Detailed Metrics**: Distribution charts by categories, difficulty density, streak records, review schedules, and overall accuracy percentages.
-
-### Settings Dashboard
-- **Learning Goals**: Configure targeted daily word acquisition values.
-- **Global Font Size Prefs**: Persists a custom card font size preference (`Small`, `Medium`, `Large`, `X-Large`) globally in localStorage, affecting cards inside the Library and Practice modules.
+### Local Storage & Offline Keys
+* `lexivault_words`: Offline JSON cache of the entire catalog.
+* `lexivault_daily_progress`: User's current day acquisition progress count.
+* `lexivault_daily_goal`: Configured study goal (default: 15).
+* `lexivault_streak`: Streak count.
+* `lexivault_practiced_ids`: Set of practiced word IDs in the current queue rotation.
+* `lexivault_word_font_size`: Global UI card size (`small`, `medium`, `large`, `xlarge`).
 
 ---
 
-<a name="5-uxui--responsive-sizing-guidelines"></a>
-## 5. UX/UI & Responsive Sizing Guidelines
+## 4. State Management & Synchronization (`VocabContext.tsx`)
 
-To maintain visual excellence and consistency:
-- **Spacing**: Use standard padding (`p-4`, `p-6`, `p-8`) to prevent crowded elements on small viewports.
-- **Glassmorphism**: Combine translucent backgrounds (`bg-slate-900/60`, `backdrop-blur-md`) with thin border lines (`border-slate-800/80`) to produce clean, sleek dark-themed dashboards.
-- **Typographic Clarity**: All card elements utilize relative text sizing and word wrapping (`break-words`) to avoid horizontal overflow on screens.
+`VocabContext` fetches all documents from Firestore. If Firestore is unreachable or credentials are unconfigured, it falls back to caching locally:
+
+```typescript
+const fetchAll = async () => {
+  if (!db) {
+    const saved = localStorage.getItem("lexivault_words");
+    if (saved) setWords(JSON.parse(saved));
+    return;
+  }
+  const fetched: VocabItem[] = [];
+  await Promise.all(
+    types.map(async (t) => {
+      const snap = await getDocs(collection(db, "vocabulary", t, "items"));
+      snap.docs.forEach((d) => {
+        fetched.push({ id: d.id, ...d.data() } as VocabItem);
+      });
+    })
+  );
+  setWords(fetched);
+  localStorage.setItem("lexivault_words", JSON.stringify(fetched));
+};
+```
+
+---
+
+## 5. Critical Logic & Algorithmic Specifications
+
+### A. Spaced Repetition (SuperMemo SM-2)
+When practicing a card under "Due" mode, the algorithm adjusts the scheduling parameters. Correct practices advance the interval, while incorrect ones reset the schedule:
+
+```typescript
+const updatePracticeProgress = async (item: VocabItem, known: boolean) => {
+  const newStreak = known ? item.streak + 1 : 0;
+  let days = 1;
+  if (newStreak === 1) days = 1;
+  else if (newStreak === 2) days = 3;
+  else if (newStreak === 3) days = 7;
+  else if (newStreak > 3) days = 14;
+
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + (known ? days : 0));
+  const reviewLabel = known ? futureDate.toISOString().split("T")[0] : "Today";
+
+  const updatedItem = {
+    ...item,
+    streak: newStreak,
+    nextReview: reviewLabel,
+  };
+
+  // Saved in Firebase or fallback localStorage...
+};
+```
+
+### B. Duplication Prevention pop-up
+When a new item is submitted, the system tests it against existing items using a trimmed, lowercase search. If a match is found, it triggers a warning popup before committing the write:
+
+```typescript
+const checkDuplicate = async (word: string): Promise<VocabItem | null> => {
+  const normalized = word.trim().toLowerCase();
+  if (!normalized) return null;
+  
+  // Scans context memory list or Firestore for identical word spellings
+  return words.find(w => w.word.trim().toLowerCase() === normalized) || null;
+};
+```
+
+### C. Overlap-free Practice Queue Rotation
+To ensure comprehensive exposure, the system maintains a set of recently practiced word IDs in `localStorage`. 
+
+```typescript
+// Filter candidates into unpracticed vs practiced groups in the current cycle
+let unpracticed = candidates.filter(c => !practicedIds.has(c.id));
+let practiced = candidates.filter(c => practicedIds.has(c.id));
+
+let finalQueue: VocabItem[] = [];
+const limitVal = sessionLimit > 0 ? sessionLimit : candidates.length;
+
+if (unpracticed.length >= limitVal) {
+  // Take unpracticed items and add to history
+  finalQueue = shuffleArray(unpracticed).slice(0, limitVal);
+  finalQueue.forEach(item => practicedIds.add(item.id));
+} else {
+  // Take remaining unpracticed items
+  finalQueue = shuffleArray(unpracticed);
+  // Draw the remainder from the beginning (recycled from practiced list)
+  const needed = limitVal - finalQueue.length;
+  if (practiced.length > 0) {
+    const recycled = shuffleArray(practiced).slice(0, needed);
+    finalQueue = [...finalQueue, ...recycled];
+  }
+  // Clear the old cycle & initialize new cycle with the new queue
+  practicedIds.clear();
+  finalQueue.forEach(item => practicedIds.add(item.id));
+}
+
+// Persist back to localStorage 'lexivault_practiced_ids'
+```
+
+### D. Fill in the Blank Game Mechanics
+1. **Hint visibility**: The Vietnamese hint is visible by default (`showViHint` starts as `true`), and the letter hint is hidden by default (`showLetterHint` starts as `false`).
+2. **Whole-card click**: Hint card elements are fully clickable wrappers rather than text buttons:
+   ```tsx
+   <div onClick={() => setShowViHint(v => !v)} className="cursor-pointer ...">
+   ```
+3. **Keyboard triggers**:
+   * Checking answer is triggered by pressing `Enter` on the form input.
+   * Progression to the next card is triggered by pressing `Enter` globally when the state has been checked (`result !== null`).
+   ```typescript
+   useEffect(() => {
+     const handleKeyDown = (e: KeyboardEvent) => {
+       if (e.key === "Enter" && result !== null && !finished) {
+         e.preventDefault();
+         handleNext();
+       }
+     };
+     window.addEventListener("keydown", handleKeyDown);
+     return () => window.removeEventListener("keydown", handleKeyDown);
+   }, [result, finished]);
+   ```
+
+---
+
+## 6. UX/UI Theme Tokens & Styles
+* **Visual Palette**: Deep space obsidian backgrounds (`#080d16`), cyber cyan accents (`#22d3ee`), royal violet gradients (`#8b5cf6`), and emerald status elements (`#10b981`).
+* **Breadcrumb back navigation**: When navigating to the Practice module from a parent window, the page uses `&source=library` or `&source=review` to customize the routing and back buttons dynamically.
+* **Layout parameters**: Containers must enforce relative flex and Grid patterns. Always use `break-words` and normal line-breaks for text content on components to avoid truncation on screen sizes.
